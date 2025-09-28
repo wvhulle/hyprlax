@@ -59,6 +59,8 @@ hyprlax ctl <COMMAND> [ARGS...]
 | `--no-tile-y` | flag | off | Disable tiling on Y axis |
 | `--margin-px-x` | float | 0 | Extra horizontal safe margin (px) |
 | `--margin-px-y` | float | 0 | Extra vertical safe margin (px) |
+| `--accumulate` | flag | off | Enable trails effect (accumulate frames) |
+| `--trail-strength` | float | 0.12 | Per-frame fade when accumulating (0..1) |
 
 ## Layers
 
@@ -140,10 +142,10 @@ hyprlax --layer ~/sky.jpg:0.2:1.0:5.0 \
 ### Configuration
 ```bash
 # Load TOML config
-hyprlax --config ~/.config/hyprlax/config.toml
+hyprlax --config ~/.config/hyprlax/hyprlax.toml
 
-# Load legacy config
-hyprlax --config ~/.config/hyprlax/parallax.conf
+# Convert legacy to TOML (non-interactive)
+hyprlax ctl convert-config ~/.config/hyprlax/parallax.conf ~/.config/hyprlax/hyprlax.toml --yes
 
 # Override config settings
 hyprlax --config config.toml --fps 30 -D

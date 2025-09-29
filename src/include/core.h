@@ -65,6 +65,8 @@ typedef struct parallax_layer {
     bool invert_workspace_y;
     bool invert_cursor_x;
     bool invert_cursor_y;
+    bool invert_window_x;
+    bool invert_window_y;
     bool hidden;                /* dedicated visibility flag */
 
     /* Animation state */
@@ -145,10 +147,13 @@ typedef struct {
     parallax_mode_t parallax_mode;    /* workspace | cursor | hybrid */
     float parallax_workspace_weight;  /* 0..1 */
     float parallax_cursor_weight;     /* 0..1 */
+    float parallax_window_weight;     /* 0..1 */
     bool invert_workspace_x;
     bool invert_workspace_y;
     bool invert_cursor_x;
     bool invert_cursor_y;
+    bool invert_window_x;
+    bool invert_window_y;
     float parallax_max_offset_x;      /* pixel clamp after blend */
     float parallax_max_offset_y;
 
@@ -170,6 +175,12 @@ typedef struct {
     double cursor_anim_duration;      /* seconds; 0 disables easing */
     easing_type_t cursor_easing;      /* easing for cursor animation */
     bool cursor_follow_global;        /* true: animate even off background via compositor/global cursor */
+
+    /* Window input configuration */
+    float window_sensitivity_x;       /* multiplier on window-based offset */
+    float window_sensitivity_y;
+    float window_deadzone_px;         /* deadzone in screen pixels */
+    float window_ema_alpha;           /* 0..1 smoothing factor */
 } config_t;
 
 /* Easing functions - pure math, no side effects */

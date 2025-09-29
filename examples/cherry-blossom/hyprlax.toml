@@ -10,9 +10,9 @@ easing = "expo"
 mode = "cursor"
 
 [global.parallax.sources]
-# Cursor-only parallax; disable workspace influence to avoid jumps on switch.
-workspace.weight = 0.0
 cursor.weight = 1.0
+workspace.weight = 0.01
+window.weight = 0.1
 
 [global.parallax.invert.cursor]
 x = false

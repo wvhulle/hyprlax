@@ -51,6 +51,7 @@ static void hyprlax_update_cursor_provider(hyprlax_context_t *ctx) {
                        (ctx->input.weights[INPUT_CURSOR] > 0.0f);
 
     if (need_cursor) {
+        bool created = false;
         if (ctx->cursor_event_fd < 0) {
             ctx->cursor_event_fd = create_timerfd_monotonic();
             if (ctx->cursor_event_fd < 0) {
@@ -58,18 +59,37 @@ static void hyprlax_update_cursor_provider(hyprlax_context_t *ctx) {
                 ctx->cursor_supported = false;
                 return;
             }
+            created = true;
         }
 
         int fps = ctx->config.target_fps > 0 ? ctx->config.target_fps : 60;
         int interval_ms = fps > 0 ? (int)(1000.0 / (double)fps) : 16;
         arm_timerfd_ms(ctx->cursor_event_fd, interval_ms, interval_ms);
         ctx->cursor_supported = true;
+
+        /* If epoll is already initialized and this is a new timerfd, register it */
+        if (created && ctx->epoll_fd >= 0) {
+            epoll_add_fd(ctx->epoll_fd, ctx->cursor_event_fd, EPOLLIN);
+        }
+
+        /* Ensure an immediate frame to prime input caches after enabling */
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
     } else {
         if (ctx->cursor_event_fd >= 0) {
+            if (ctx->epoll_fd >= 0) {
+                epoll_del_fd(ctx->epoll_fd, ctx->cursor_event_fd);
+            }
             close(ctx->cursor_event_fd);
             ctx->cursor_event_fd = -1;
         }
         ctx->cursor_supported = false;
+
+        /* Kick a frame so renderer applies new weights immediately */
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
     }
 }
 
@@ -319,6 +339,9 @@ int hyprlax_reload_config(hyprlax_context_t *ctx) {
         if (rc == HYPRLAX_SUCCESS) {
             input_manager_apply_config(&ctx->input, &ctx->config);
             hyprlax_update_cursor_provider(ctx);
+            if (ctx->frame_timer_fd >= 0) {
+                arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+            }
             return HYPRLAX_SUCCESS;
         }
         return HYPRLAX_ERROR_INVALID_ARGS;
@@ -1501,6 +1524,9 @@ int hyprlax_runtime_set_property(hyprlax_context_t *ctx, const char *property, c
         }
         input_manager_apply_config(&ctx->input, &ctx->config);
         hyprlax_update_cursor_provider(ctx);
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
         return 0;
     }
     if (strcmp(property, "parallax.input") == 0) {
@@ -1513,6 +1539,9 @@ int hyprlax_runtime_set_property(hyprlax_context_t *ctx, const char *property, c
         input_source_selection_commit(&selection, &ctx->config);
         input_manager_apply_config(&ctx->input, &ctx->config);
         hyprlax_update_cursor_provider(ctx);
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
         return 0;
     }
     if (strcmp(property, "parallax.sources.cursor.weight") == 0) {
@@ -1521,6 +1550,9 @@ int hyprlax_runtime_set_property(hyprlax_context_t *ctx, const char *property, c
         if (ctx->config.parallax_cursor_weight > 1.0f) ctx->config.parallax_cursor_weight = 1.0f;
         input_manager_apply_config(&ctx->input, &ctx->config);
         hyprlax_update_cursor_provider(ctx);
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
         return 0;
     }
     if (strcmp(property, "parallax.sources.workspace.weight") == 0) {
@@ -1529,6 +1561,9 @@ int hyprlax_runtime_set_property(hyprlax_context_t *ctx, const char *property, c
         if (ctx->config.parallax_workspace_weight > 1.0f) ctx->config.parallax_workspace_weight = 1.0f;
         input_manager_apply_config(&ctx->input, &ctx->config);
         hyprlax_update_cursor_provider(ctx);
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
         return 0;
     }
     if (strcmp(property, "parallax.sources.window.weight") == 0) {
@@ -1536,6 +1571,9 @@ int hyprlax_runtime_set_property(hyprlax_context_t *ctx, const char *property, c
         if (ctx->config.parallax_window_weight < 0.0f) ctx->config.parallax_window_weight = 0.0f;
         if (ctx->config.parallax_window_weight > 1.0f) ctx->config.parallax_window_weight = 1.0f;
         input_manager_apply_config(&ctx->input, &ctx->config);
+        if (ctx->frame_timer_fd >= 0) {
+            arm_timerfd_ms(ctx->frame_timer_fd, 1, 0);
+        }
         return 0;
     }
     if (strcmp(property, "parallax.invert.cursor.x") == 0) {

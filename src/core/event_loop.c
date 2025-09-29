@@ -45,6 +45,12 @@ int epoll_add_fd(int epfd, int fd, uint32_t events) {
     return epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
 }
 
+int epoll_del_fd(int epfd, int fd) {
+    if (epfd < 0 || fd < 0) return -1;
+    /* According to epoll_ctl docs, the event pointer is ignored for DEL */
+    return epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+}
+
 void hyprlax_setup_epoll(hyprlax_context_t *ctx) {
     if (!ctx) return;
     ctx->epoll_fd = epoll_create1(EPOLL_CLOEXEC);
@@ -216,6 +222,9 @@ int hyprlax_run(hyprlax_context_t *ctx) {
                     }
                 }
             }
+            /* Ensure input providers (e.g., cursor) update during continuous render
+               windows (animations), even when we aren't blocking on epoll. */
+            hyprlax_cursor_tick(ctx);
             /* Advance animations before rendering */
             hyprlax_update_layers(ctx, current_time);
             if (ctx->monitors) {

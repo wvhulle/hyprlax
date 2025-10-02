@@ -5,6 +5,7 @@
 
 @layer base {
   body {
-    @apply bg-hypr-darker text-white overflow-hidden;
+    /* Allow vertical scrolling; avoid horizontal overflow */
+    @apply bg-hypr-darker text-white overflow-y-auto overflow-x-hidden;
   }
 }

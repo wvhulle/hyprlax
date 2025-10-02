@@ -69,7 +69,7 @@
   });
 </script>
 
-<main class="h-screen w-screen flex flex-col items-center justify-center relative overflow-hidden">
+<main class="min-h-screen w-full flex flex-col items-center justify-center relative">
   <!-- Interactive gradient background - subtle dark gradient -->
   <div 
     class="absolute inset-0"

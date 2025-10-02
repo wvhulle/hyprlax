@@ -496,13 +496,27 @@ static int wayland_create_window(const window_config_t *config) {
             "hyprlax");
 
         if (g_wayland_data->layer_surface) {
-            /* Configure as fullscreen background */
+            /* Configure as fullscreen background (input-transparent, non-interactive) */
             zwlr_layer_surface_v1_set_exclusive_zone(g_wayland_data->layer_surface, -1);
             zwlr_layer_surface_v1_set_anchor(g_wayland_data->layer_surface,
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+
+            /* Do not accept keyboard focus on wallpaper */
+            zwlr_layer_surface_v1_set_keyboard_interactivity(
+                g_wayland_data->layer_surface,
+                ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+
+            /* Make the background surface input-transparent */
+            if (g_wayland_data->compositor && g_wayland_data->surface) {
+                struct wl_region *empty = wl_compositor_create_region(g_wayland_data->compositor);
+                if (empty) {
+                    wl_surface_set_input_region(g_wayland_data->surface, empty);
+                    wl_region_destroy(empty);
+                }
+            }
 
             /* Add listener with g_wayland_data as user data */
             zwlr_layer_surface_v1_add_listener(g_wayland_data->layer_surface,
@@ -609,13 +623,27 @@ int wayland_create_monitor_surface(monitor_instance_t *monitor) {
             "hyprlax");
 
         if (monitor->layer_surface) {
-            /* Configure as fullscreen background */
+            /* Configure as fullscreen background (input-transparent, non-interactive) */
             zwlr_layer_surface_v1_set_exclusive_zone(monitor->layer_surface, -1);
             zwlr_layer_surface_v1_set_anchor(monitor->layer_surface,
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP |
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT |
                 ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
+
+            /* Do not accept keyboard focus on wallpaper */
+            zwlr_layer_surface_v1_set_keyboard_interactivity(
+                monitor->layer_surface,
+                ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE);
+
+            /* Make this monitor's background surface input-transparent */
+            if (g_wayland_data->compositor && monitor->wl_surface) {
+                struct wl_region *empty = wl_compositor_create_region(g_wayland_data->compositor);
+                if (empty) {
+                    wl_surface_set_input_region(monitor->wl_surface, empty);
+                    wl_region_destroy(empty);
+                }
+            }
 
             /* Set size to 0,0 to let compositor decide */
             zwlr_layer_surface_v1_set_size(monitor->layer_surface, 0, 0);

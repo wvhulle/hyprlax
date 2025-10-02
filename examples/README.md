@@ -2,6 +2,8 @@
 
 This directory contains self-contained example configurations demonstrating various parallax effects with hyprlax.
 
+See the full gallery in docs: [Examples Gallery](../docs/guides/examples.md)
+
 ## Available Examples
 
 Note: Some examples historically used `parallax.conf`. If `hyprlax.toml` is missing, convert once:

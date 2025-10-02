@@ -27,6 +27,7 @@ In-depth guides for specific features
 - [Multi-Layer Parallax](guides/multi-layer.md) - Create depth effects
 - [Animation](guides/animation.md) - Master animation timing
 - [Cursor Tracking](guides/cursor-tracking.md) - Mouse-driven parallax
+- [Examples](guides/examples.md) - Gallery of ready-to-run scenes
 - [Performance](guides/performance.md) - Optimization tips
 - [Troubleshooting](guides/troubleshooting.md) - Solve common issues
 - [IPC Overview](guides/ipc-overview.md) - Runtime control and workflows

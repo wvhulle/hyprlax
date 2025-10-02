@@ -7,7 +7,7 @@ debug = false
 duration = 1.0          # 1 second workspace animation
 shift = 150             # Moderate parallax shift
 vsync = true
-easing = "ease_out"
+easing = "expo"
 
 # Single background image example
 # Uncomment to use just one image:

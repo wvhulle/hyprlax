@@ -166,9 +166,13 @@ hyprlax ctl status [--json|-j] [--long|-l]
 ```
 
 **Output includes:**
-- Default (text): running state, layers, target FPS, current FPS, parallax inputs, Render (overflow + tile), compositor, socket, vsync, debug
-- `--long`: adds Shift Pixels, input weights, and full Render defaults (overflow, tile, margin_px)
-- `--json`: full machine-readable status including the above plus `monitors[]` (name, size, pos, scale, refresh, caps)
+- Default (text): running state, layers, target FPS, FPS, parallax mode and inputs, monitors count, compositor, socket
+- `--json`: machine-readable object with keys including:
+  - `running`, `layers`, `target_fps`, `fps`
+  - `parallax` (mode) and `parallax_input` (enabled sources)
+  - `compositor`, `socket`, `vsync`, `debug`
+  - `caps` (compositor capability flags)
+  - `monitors[]` with `name`, `size`, `pos`, `scale`, `refresh`, `caps`
 
 ### reload
 Reload configuration file.
@@ -245,19 +249,20 @@ fi
 
 ## Status JSON Fields
 
-When running `hyprlax ctl status --json`, the response includes:
+When running `hyprlax ctl status --json`, a compact JSON object is returned. Fields include:
 
 - `running`: boolean
 - `layers`: number
 - `target_fps`: number
 - `fps`: number
 - `parallax`: string (workspace|cursor|hybrid)
-- `shift_pixels`: number (pixels per workspace)
-- `parallax_weights`: object `{ workspace: number, cursor: number }`
-- `render`: object `{ overflow: string, tile: [bool,bool], margin_px: [number,number] }`
+- `parallax_input`: string (e.g., `workspace,cursor:0.3`)
 - `compositor`: string
 - `socket`: string
 - `vsync`: boolean
+- `debug`: boolean
+- `caps`: object with compositor capability flags
+- `monitors`: array of monitor objects with `name`, `size`, `pos`, `scale`, `refresh`, `caps`
 - `debug`: boolean
 - `caps`: capability flags
 - `monitors`: array of monitor objects `{ name, size, pos, scale, refresh, caps }`

@@ -80,7 +80,7 @@ You can also specify the location directly:
 ### Other Methods
 
 - **From release**: Download from [releases page](https://github.com/sandwichfarm/hyprlax/releases)
-- **Manual build**: See [installation guide](docs/installation.md)
+- **Manual build**: See [building from source](docs/development/building.md)
 
 ### Dependencies
 
@@ -88,7 +88,7 @@ You can also specify the location directly:
 - Wayland, wayland-protocols, Mesa (EGL/GLES)
 
 
-Full dependency list: [installation guide](docs/installation.md#dependencies)
+Full dependency list: [installation guide](docs/getting-started/installation.md#dependencies)
 
 ## Quick Start
 
@@ -111,19 +111,20 @@ HYPRLAX_COMPOSITOR=sway hyprlax ~/Pictures/wallpaper.jpg
 
 ### Key Options
 
-- `-s, --shift` - Pixels to shift per workspace (default: 200)
+- `-s, --shift` - Pixels to shift per workspace (default: 150)
 - `-d, --duration` - Animation duration in seconds (default: 1.0)
 - `-e, --easing` - Animation curve: linear, sine, expo, elastic, etc.
+- `--input` - Parallax inputs (e.g., `workspace,cursor:0.3`)
 - `-p, --platform` - Platform backend: `wayland` or `auto` (default: auto)
 - `-C, --compositor` - Compositor: `hyprland`, `sway`, `generic`, `auto` (default: auto)
-- `--layer` - Add layer: `image:shift:opacity[:easing[:delay[:duration[:blur]]]]`
+- `--layer` - Add layer: `image:shift:opacity[:blur]`
 - `--config` - Load from config file
 
-**Full documentation:** [Configuration Guide](docs/configuration.md)
+**Full documentation:** [Configuration Overview](docs/configuration/README.md)
 
 ### Migrating from legacy .conf
 
-Legacy runtime loading of `.conf` files has been removed. Convert once to TOML, then run with the new path:
+Legacy `.conf` files are deprecated. Convert once to TOML for full feature support and better validation:
 
 ```bash
 # Interactive (prompts):
@@ -132,8 +133,8 @@ hyprlax ctl convert-config ~/.config/hyprlax/parallax.conf ~/.config/hyprlax/hyp
 # Non-interactive:
 hyprlax ctl convert-config ~/.config/hyprlax/parallax.conf ~/.config/hyprlax/hyprlax.toml --yes
 
-# If you start hyprlax with a legacy path, it prints the exact convert command
-hyprlax --non-interactive --config ~/.config/hyprlax/parallax.conf
+# If you start hyprlax with a legacy path, it will warn and print a suggested convert command
+hyprlax --config ~/.config/hyprlax/parallax.conf
 ```
 
 ## Compositor Configuration
@@ -164,7 +165,7 @@ riverctl spawn "pkill hyprlax; hyprlax ~/Pictures/wallpaper.jpg"
 
 
 ### Other Compositors
-See [Compositor Configuration Guide](docs/compositors.md) for specific setup instructions.
+See [Compatibility](docs/getting-started/compatibility.md) for specifics.
 
 ## Runtime Control
 
@@ -211,27 +212,30 @@ hyprlax ctl get animation.duration
 hyprlax ctl status
 ```
 
-**Full guide:** [Dynamic Layer Management](docs/IPC.md)
+**Full guide:** [IPC Overview](docs/guides/ipc-overview.md) and [IPC Commands](docs/reference/ipc-commands.md)
 
 ## Documentation
 
 ### 📚 User Guides
-- [Installation](docs/installation.md) - Detailed installation instructions
-- [Configuration](docs/configuration.md) - All configuration options
-- [Environment Variables](docs/configuration/environment.md) - ENV mapping and precedence
-- [Compositor Support](docs/compositors.md) - Compositor-specific features
-- [Multi-Layer Parallax](docs/multi-layer.md) - Creating depth with layers
-- [Animation](docs/animation.md) - Easing functions and timing
-- [Examples](docs/examples.md) - Ready-to-use configurations
+- [Installation](docs/getting-started/installation.md) - Detailed installation instructions
+- [Configuration](docs/configuration/README.md) - All configuration options
+- [Environment Variables](docs/reference/environment-vars.md) - ENV mapping and precedence
+- [Compatibility](docs/getting-started/compatibility.md) - Compositor-specific features
+- [Multi-Layer Parallax](docs/guides/multi-layer.md) - Creating depth with layers
+- [Animation](docs/guides/animation.md) - Easing functions and timing
+- [Examples](docs/guides/examples.md) - Ready-to-run scenes
+
+- [Performance](docs/guides/performance.md) - Optimization tips
+- [Troubleshooting](docs/guides/troubleshooting.md) - Common issues and solutions
 
 ### 🔧 Developer Guides
-- [Architecture](docs/architecture.md) - Modular design and components
-- [Development](docs/development.md) - Building and contributing
-- [Adding Compositors](docs/development.md#adding-compositor-support) - Extending compositor support
+- [Architecture](docs/development/architecture.md) - Modular design and components
+- [Development](docs/development/README.md) - Building and contributing
+- [Adding Compositors](docs/development/architecture.md) - Extending compositor support
 
 ### ❓ Help
-- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
-- [Dynamic Layers](docs/IPC.md) - Runtime layer control via IPC
+- [Troubleshooting](docs/guides/troubleshooting.md) - Common issues and solutions
+- [Dynamic Layers](docs/guides/ipc-overview.md) - Runtime layer control via IPC
 
 ## Changelog
 
@@ -247,7 +251,7 @@ hyprlax uses a modular architecture with clear separation of concerns:
 - **Renderer abstraction** - OpenGL ES 2.0 rendering
 - **Core engine** - Animation and configuration management
 
-See [Architecture Documentation](docs/architecture.md) for details.
+See [Architecture Documentation](docs/development/architecture.md) for details.
 
 ### Testing
 
@@ -285,7 +289,7 @@ make lint-fix
 
 Pull requests are welcome! Please read [RELEASE.md](RELEASE.md) for the release process.
 
-See [Development Guide](docs/development.md) for:
+See [Development Guide](docs/development/README.md) for:
 - Building from source
 - Project architecture
 - Adding new features

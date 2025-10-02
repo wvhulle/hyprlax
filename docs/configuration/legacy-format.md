@@ -55,7 +55,7 @@ Set animation easing function:
 easing expo
 ```
 
-Available: linear, ease, ease_in, ease_out, ease_in_out, expo, cubic, quart, quint, sine, circ, elastic, back, bounce
+Available: linear, cubic, quart, quint, sine, expo, circ, elastic, back, bounce
 
 ### delay
 Set animation delay in seconds:

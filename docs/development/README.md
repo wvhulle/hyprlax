@@ -31,7 +31,7 @@ make debug
 make test
 
 # Format code
-make format
+# Use your editor/clang-format. No built-in 'make format' target.
 
 # Commit changes
 git add -A
@@ -105,7 +105,7 @@ make check
 make test
 
 # Coverage report
-make coverage
+# Not provided by Makefile; use external tools if needed.
 ```
 
 ## Contributing Guidelines
@@ -159,10 +159,7 @@ See [Testing](testing.md) for test writing guide.
 ## Documentation
 
 ### Building Docs
-```bash
-# Generate from source
-make docs
-```
+No dedicated docs build target is provided. Edit files under `docs/` directly.
 
 ### Documentation Style
 - Clear, concise language
@@ -173,9 +170,9 @@ make docs
 ## Release Process
 
 ### Version Bumping
-1. Update version in `src/version.h`
+1. Update `VERSION` file if needed (build embeds it as HYPRLAX_VERSION)
 2. Update CHANGELOG.md
-3. Tag release: `git tag -a v2.0.0 -m "Release v2.0.0"`
+3. Tag release: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
 
 ### Building Release
 ```bash

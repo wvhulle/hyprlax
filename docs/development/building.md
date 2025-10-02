@@ -170,8 +170,8 @@ sudo make install
 ```
 Default locations:
 - Binary: `/usr/local/bin/hyprlax`
-- Docs: `/usr/local/share/doc/hyprlax/`
-- Examples: `/usr/local/share/hyprlax/examples/`
+- Docs: `/usr/local/share/doc/hyprlax/` (if packaged externally)
+- Examples: Included in the repository under `examples/` (not installed by default)
 
 ### Custom Prefix
 ```bash

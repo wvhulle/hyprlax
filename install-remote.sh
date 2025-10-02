@@ -6,7 +6,7 @@
 set -e
 
 # Version of this installer
-INSTALLER_VERSION="1.0.0"
+INSTALLER_VERSION="1.0.1"
 
 # GitHub repository
 GITHUB_REPO="sandwichfarm/hyprlax"
@@ -75,53 +75,9 @@ EOF
     exit 0
 }
 
-# Prompt for installation type
-prompt_install_type() {
-    if [ -n "$INSTALL_TYPE" ]; then
-        # Already set via command line
-        return
-    fi
-    
-    echo "================================"
-    echo "   Installation Location"
-    echo "================================"
-    echo
-    print_info "Please select installation location:"
-    echo
-    echo "  ${GREEN}1)${NC} System-wide ${CYAN}(/usr/local/bin)${NC} ${GREEN}[RECOMMENDED]${NC}"
-    echo "     • Available to all users"
-    echo "     • Works with compositor autostart (exec-once)"
-    echo "     • Requires sudo for installation"
-    echo
-    echo "  ${YELLOW}2)${NC} User-specific ${CYAN}(~/.local/bin)${NC}"
-    echo "     • Only available to current user"
-    echo "     • ${YELLOW}May not work with compositor autostart${NC}"
-    echo "     • No sudo required"
-    echo
-    
-    while true; do
-        read -p "Select option [1-2] (default: 1): " -n 1 -r choice
-        echo
-        
-        case "$choice" in
-            1|"")
-                INSTALL_TYPE="system"
-                print_success "Selected: System-wide installation"
-                break
-                ;;
-            2)
-                INSTALL_TYPE="user"
-                print_warning "Selected: User installation"
-                print_warning "Note: You may need to use full path in exec-once"
-                break
-                ;;
-            *)
-                print_error "Invalid choice. Please select 1 or 2."
-                ;;
-        esac
-    done
-    echo
-}
+# NOTE: Legacy interactive prompt removed.
+# When running via curl | bash, reading from STDIN consumes the script body.
+# We now use prompt_install_location() below which reads from /dev/tty safely.
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -787,9 +743,6 @@ main() {
     echo "     hyprlax Installer"
     echo "================================"
     echo
-    
-    # Prompt for installation type if not specified
-    prompt_install_type
     
     # Detect architecture
     ARCH=$(detect_arch)

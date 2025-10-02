@@ -25,7 +25,7 @@ Usage: Subtle motions
 ```
 
 ### cubic (default)
-Cubically eased deceleration
+Cubic ease-out deceleration
 ```
 Speed: ╱─────────╲
 Usage: Smooth, predictable motion
@@ -114,7 +114,7 @@ Usage: Extra responsive feel
 
 ### Command Line
 ```bash
-# Default exponential
+# Default cubic
 hyprlax --easing cubic image.jpg
 
 # Smooth natural motion
@@ -160,13 +160,13 @@ hyprlax ctl set easing elastic
 - Attention-grabbing
 
 ### For Subtle Background
-- **Recommended**: `sine`, `ease`, `ease_in_out`
+- **Recommended**: `sine`, `cubic`
 - **Duration**: 2.0 - 5.0 seconds
 - Gentle, barely noticeable
 
 ## Performance Notes
 
-- Simple easings (`linear`, `ease`) have minimal CPU impact
+- Simple easings (`linear`, `cubic`) have minimal CPU impact
 - Complex easings (`elastic`, `bounce`) require more calculations
 - Longer durations spread calculations over more frames
 
@@ -175,7 +175,7 @@ hyprlax ctl set easing elastic
 Compare different easings:
 ```bash
 # Test each easing for 2 seconds
-for easing in linear ease ease_in ease_out expo elastic bounce; do
+for easing in linear cubic expo elastic bounce; do
     echo "Testing: $easing"
     hyprlax ctl set easing $easing
     hyprlax ctl set duration 2.0
@@ -188,7 +188,7 @@ done
 | Function | Formula Type |
 |----------|--------------|
 | linear | `t` |
-| ease | Cubic Bezier |
+| cubic | `t³` |
 | cubic | `t³` |
 | quart | `t⁴` |
 | quint | `t⁵` |
@@ -204,7 +204,7 @@ done
 | Easing | Short (0.2-0.5s) | Medium (0.5-1.5s) | Long (1.5-3.0s) |
 |--------|------------------|-------------------|-----------------|
 | linear | ✅ Good | ✅ Good | ⚠️ May feel slow |
-| ease | ✅ Good | ✅ Good | ✅ Good |
+| cubic | ✅ Good | ✅ Good | ✅ Good |
 | expo | ✅ Snappy | ✅ Smooth | ⚠️ May drag |
 | elastic | ❌ Too fast | ✅ Playful | ✅ Noticeable |
 | bounce | ❌ Too fast | ✅ Fun | ⚠️ May annoy |

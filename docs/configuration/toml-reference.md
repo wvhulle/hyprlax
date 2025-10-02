@@ -28,19 +28,15 @@ Complete reference for hyprlax TOML configuration format.
 
 ### Easing Functions
 - `linear` - Constant speed
-- `ease` - Smooth start and end
-- `ease_in` - Slow start
-- `ease_out` - Slow end  
-- `ease_in_out` - Slow start and end
-- `expo` - Exponential (default)
-- `cubic` - Cubic curve
-- `quart` - Quartic curve
-- `quint` - Quintic curve
-- `sine` - Sinusoidal
-- `circ` - Circular
-- `elastic` - Elastic bounce
-- `back` - Overshoot and return
-- `bounce` - Bounce effect
+- `cubic` - Cubic ease-out (default)
+- `quart` - Quartic ease-out
+- `quint` - Quintic ease-out
+- `sine` - Sinusoidal ease-out
+- `expo` - Exponential ease-out
+- `circ` - Circular ease-out
+- `elastic` - Elastic overshoot
+- `back` - Slight pull-back before moving
+- `bounce` - Bouncing settle
 
 ## Parallax Settings
 
@@ -165,13 +161,12 @@ y = 150
 
 [global.input.cursor]
 follow_global = true
-normalize_to = "monitor"
 sensitivity_x = 1.2
 sensitivity_y = 0.8
 deadzone_px = 5
 ema_alpha = 0.3        # Smooth cursor movement
 animation_duration = 2.0
-easing = "ease_out"
+easing = "expo"
 
 # Background layer - moves slowly
 [[global.layers]]

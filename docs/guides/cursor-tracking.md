@@ -96,12 +96,12 @@ Animate cursor-driven changes:
 ```toml
 [global.input.cursor]
 animation_duration = 3.0    # Seconds to animate position changes
-easing = "ease_out"         # Easing function for cursor animation
+easing = "expo"             # Easing function for cursor animation
 ```
 
 ## Normalization
 
-Note: Cursor normalization targets are currently fixed; configuration of `normalize_to` is not supported.
+Note: Cursor normalization targets are currently fixed; `normalize_to` is reserved and not configurable in this build.
 
 ## Movement Control
 
@@ -207,7 +207,6 @@ y = true
 [global.input.cursor]
 sensitivity_x = 0.5
 sensitivity_y = 0.5
-normalize_to = "monitor"
 
 [[global.layers]]
 path = "card_shadow.png"
@@ -250,7 +249,6 @@ Use canvas normalization for uniform behavior:
 
 ```toml
 [global.input.cursor]
-normalize_to = "canvas"
 follow_global = true
 ```
 
@@ -322,13 +320,12 @@ y = 200
 
 [global.input.cursor]
 follow_global = true
-normalize_to = "monitor"
 sensitivity_x = 1.0
 sensitivity_y = 0.7
 deadzone_px = 2
 ema_alpha = 0.25
 animation_duration = 2.5
-easing = "ease_out"
+easing = "expo"
 
 # Sky - barely moves
 [[global.layers]]

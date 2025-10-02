@@ -7,9 +7,7 @@ Master the animation system to create smooth, natural parallax effects.
 Hyprlax combines one or more **input sources** to drive layer movement:
 - `workspace`: driven by workspace changes (original behavior)
 - `cursor`: driven by smoothed cursor motion
-- `window` *(planned)*: will track the active window position
-
-> The `window` source is currently implemented for Hyprland. Other compositors ignore it gracefully until native support is added.
+- `window`: tracks the active window center (implemented for Hyprland; other compositors ignore it gracefully until native support is added)
 
 Configure sources via CLI or TOML:
 

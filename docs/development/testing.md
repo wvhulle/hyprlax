@@ -333,11 +333,7 @@ jobs:
     - name: Memory check
       run: make memcheck
     
-    - name: Coverage
-      run: make coverage
-    
-    - name: Upload coverage
-      uses: codecov/codecov-action@v2
+    # Coverage not provided by Makefile; integrate external tooling if desired
 ```
 
 ## Test Checklist

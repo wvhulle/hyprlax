@@ -27,7 +27,6 @@ y = 80
 
 [global.input.cursor]
 follow_global = true
-normalize_to = "monitor"
 sensitivity_x = 0.5
 sensitivity_y = 0.50
 deadzone_px = 3

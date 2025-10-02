@@ -22,7 +22,7 @@ Dynamic parallax wallpaper engine with multi-compositor support for Linux.
 - 🖼️ **Parallax effect** - Wallpaper shifts as you switch workspaces
 - 🌌 **Multi-layer parallax** - Create depth with multiple layers moving at different speeds
 - 🔍 **Depth-of-field blur** - Realistic depth perception with per-layer blur effects
-- 🖥️ **Multi-compositor support** - Works with Hyprland, Sway, River, Wayfire, Niri, and more
+- 🖥️ **Multi-compositor support** - Works with Hyprland, Sway, River,  Niri, and more
 - ⚡ **Lightweight** - Native client using appropriate protocols for each platform
 - 🎨 **Customizable** - Per-layer easing functions, delays, and animation parameters
 - 🔄 **Seamless transitions** - Interrupts and chains animations smoothly
@@ -34,11 +34,10 @@ Dynamic parallax wallpaper engine with multi-compositor support for Linux.
 | Compositor | Workspace Model | Special Features | Status |
 |------------|----------------|------------------|---------|
 | **Hyprland** | Linear workspaces | Full IPC, blur effects, animations | ✅ Full Support |
-| **Sway** | i3-compatible workspaces | i3 IPC protocol | ✅ Full Support |
-| **River** | Tag-based system | Tag workspace model | ✅ Full Support |
-| **Wayfire** | 2D workspace grid | Horizontal & vertical parallax | ✅ Full Support |
-| **Niri** | Scrollable workspaces | Smooth scrolling | ✅ Full Support |
-| **Generic Wayland** | Basic workspaces | Any wlr-layer-shell compositor | ✅ Basic Support |
+| **River** | Tag-based system | Tag workspace model | ⚡ Experimental |
+| **Niri** | Scrollable workspaces | Smooth scrolling |⚡ Experimental |
+| **Sway** | i3-compatible workspaces | i3 IPC protocol | ⚡ Experimental |
+| **Generic Wayland** | Basic workspaces | Any wlr-layer-shell compositor | ⚡ Experimental |
 
 
 ## Installation

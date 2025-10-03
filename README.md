@@ -30,11 +30,10 @@ Dynamic parallax wallpaper engine with multi-compositor support for Linux.
 | Compositor | Workspace Model | Special Features | Status |
 |------------|----------------|------------------|---------|
 | **Hyprland** | Linear workspaces | Full IPC, blur effects, animations | ✅ Full Support |
-| **Sway** | i3-compatible workspaces | i3 IPC protocol | ✅ Full Support |
-| **River** | Tag-based system | Tag workspace model | ✅ Full Support |
-| **Wayfire** | 2D workspace grid | Horizontal & vertical parallax | ✅ Full Support |
-| **Niri** | Scrollable workspaces | Smooth scrolling | ✅ Full Support |
-| **Generic Wayland** | Basic workspaces | Any wlr-layer-shell compositor | ✅ Basic Support |
+| **Niri** | Scrollable workspaces | Smooth scrolling | ⚡ Experimental |
+| **River** | Tag-based system | Tag workspace model | ⚡ Experimental |
+| **Sway** | i3-compatible workspaces | i3 IPC protocol | ⚡ Experimental |
+| **Generic Wayland** | Basic workspaces | Any wlr-layer-shell compositor | ⚡ Experimental |
 
 
 ## Installation

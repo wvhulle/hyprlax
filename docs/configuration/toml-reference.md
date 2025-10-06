@@ -28,6 +28,7 @@ Complete reference for hyprlax TOML configuration format.
 
 ### Easing Functions
 - `linear` - Constant speed
+- `quad` - Quadratic ease-out
 - `cubic` - Cubic ease-out (default)
 - `quart` - Quartic ease-out
 - `quint` - Quintic ease-out
@@ -37,6 +38,7 @@ Complete reference for hyprlax TOML configuration format.
 - `elastic` - Elastic overshoot
 - `back` - Slight pull-back before moving
 - `bounce` - Bouncing settle
+- `snap` - Fast start with sharp deceleration
 
 ## Parallax Settings
 
@@ -99,17 +101,23 @@ Array of layer definitions, rendered back to front:
 | `scale` | float | 1.0 | Layer scale factor |
 | `opacity` | float | 1.0 | Layer opacity (0.0-1.0) |
 | `blur` | float | 0.0 | Blur amount |
-| `fit` | string | "cover" | Content fit mode |
+| `fit` | string | "stretch" | Content fit mode |
 | `align` | table | center | Layer alignment |
 | `margin_px` | table | 0 | Layer margins |
+| `overflow` | string | inherit | Texture overflow mode (overrides `[global.render]`) |
+| `tile` | bool/table | inherit | Enable tiling (`true`) or per-axis `{ x, y }` |
+| `uv_offset` | table | `{ x=0, y=0 }` | Initial UV offset for sampling |
+| `tint_color` | string | - | Hex RGB like `#RRGGBB` |
+| `tint_strength` | float | 0.0 | 0.0..1.0 strength of tint |
 
 ### Content Fit Modes
 
+Accepted values (renderer tokens):
+- `stretch` - Stretch to fill (may distort)
 - `cover` - Cover entire area (may crop)
 - `contain` - Fit entirely visible (may letterbox)
-- `fill` - Stretch to fill (may distort)
-- `scale-down` - Like contain but never upscale
-- `none` - No scaling
+- `fit_width` (alias: `fit_x`) - Fit by width
+- `fit_height` (alias: `fit_y`) - Fit by height
 
 ### Alignment
 
@@ -122,6 +130,10 @@ Values:
 - `0.5` = center
 - `1.0` = right/bottom
 - Negative values for offset beyond edge
+
+String forms are also accepted per-axis:
+- X: `left`, `center`, `right`
+- Y: `top`, `center`, `bottom`
 
 ### Shift Multiplier
 
@@ -213,11 +225,35 @@ Rendering behavior, including optional trails (frame accumulation).
 | `accumulate` | bool | false | Accumulate frames to create motion trails |
 | `trail_strength` | float | 0.12 | Per-frame fade when accumulating (0..1) |
 
+#### Overflow Modes
+
+Use to control sampling outside the image bounds (when panned/scaled):
+- `repeat_edge` (alias: `clamp`) - Clamp to edge texels (default)
+- `repeat` (alias: `tile`) - Repeat in both axes
+- `repeat_x` (alias: `tilex`) - Repeat in X only
+- `repeat_y` (alias: `tiley`) - Repeat in Y only
+- `none` (alias: `off`) - No sampling outside; outside area may be masked
+
+Notes:
+- Per-layer `overflow` can be set in `[[global.layers]]` and overrides the global mode.
+- When combined with `tile`, per-axis tiling takes precedence over the overflow mode for wrap behavior.
+
+#### Tiling
+
+Controls explicit repeating per axis. Two forms are accepted:
+- Boolean: `tile = true` (enables repeat in both axes)
+- Table: `tile = { x = true, y = false }` (per-axis)
+
+Precedence and interaction:
+- Per-layer `tile` overrides the global `tile`.
+- If `tile.x` or `tile.y` is enabled, that axis repeats regardless of `overflow`.
+- If `overflow = none` and tiling is disabled on an axis, the renderer masks outside that axis to avoid edge artifacts.
+
 Example:
 
 ```toml
 [global.render]
-overflow = "repeat_edge"
+overflow = "repeat_x"         # repeat horizontally only
 tile = { x = false, y = false }
 margin_px = { x = 0, y = 0 }
 accumulate = true

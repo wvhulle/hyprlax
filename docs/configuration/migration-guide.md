@@ -54,7 +54,7 @@ opacity = 0.9
 | `shift 200` | `[global]`<br>`shift = 200` |
 | `easing expo` | `[global]`<br>`easing = "expo"` |
 | `fps 60` | `[global]`<br>`fps = 60` |
-| `delay 0.5` | `[global]`<br>`delay = 0.5` |
+
 | `layer path shift opacity blur` | `[[global.layers]]`<br>`path = "path"`<br>`shift_multiplier = shift`<br>`opacity = opacity`<br>`blur = blur` |
 
 ## Advanced Features
@@ -75,12 +75,12 @@ ema_alpha = 0.25  # Smoothing
 
 ### Per-Layer Content Fitting
 
-Control how images scale:
+Control how images scale (supported values): `stretch`, `cover`, `contain`, `fit_width`, `fit_height`
 
 ```toml
 [[global.layers]]
 path = "image.png"
-fit = "contain"    # or "cover", "fill", "scale-down"
+fit = "contain"    # or "cover", "stretch", "fit_width", "fit_height"
 align = { x = 0.5, y = 0.8 }  # Bottom-center
 ```
 

@@ -188,7 +188,7 @@ done
 | Function | Formula Type |
 |----------|--------------|
 | linear | `t` |
-| cubic | `t³` |
+| quad | `t²` |
 | cubic | `t³` |
 | quart | `t⁴` |
 | quint | `t⁵` |

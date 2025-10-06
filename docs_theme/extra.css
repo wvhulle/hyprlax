@@ -1,0 +1,82 @@
+/* Match MkDocs Material (slate) to homepage Tailwind palette */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local("JetBrains Mono"), local("JetBrainsMono");
+}
+
+:root,
+[data-md-color-scheme="slate"] {
+  /* Colors from website/tailwind.config.js */
+  --hypr-blue: #00D9FF;
+  --hypr-pink: #FF007F;
+  --hypr-purple: #9D00FF;
+  --hypr-dark: #0A0E1B;
+  --hypr-darker: #050810;
+
+  /* Material color tokens */
+  --md-primary-fg-color: var(--hypr-blue);
+  --md-primary-fg-color--light: #5ee9ff;
+  --md-primary-fg-color--dark: #00a8c7;
+  --md-accent-fg-color: var(--hypr-pink);
+
+  --md-default-bg-color: var(--hypr-dark);
+  --md-code-bg-color: var(--hypr-darker);
+  --md-footer-bg-color: var(--hypr-darker);
+  --md-typeset-color: #e5e7eb; /* gray-200 */
+  --md-typeset-a-color: var(--hypr-blue);
+}
+
+/* Code blocks and inline code */
+code, pre, .md-typeset code { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+.md-typeset pre > code { border-radius: 8px; }
+
+/* Subtle section separators */
+.md-typeset hr { border-color: rgba(255,255,255,0.08); }
+
+/* Hero-like emphasis for top-level headings */
+.md-typeset h1 { color: #f3f4f6; }
+.md-typeset h2 { color: #e5e7eb; }
+
+/* Accent links on hover */
+a:hover { color: var(--hypr-pink); }
+
+/* Links: subtle underline matching accent */
+.md-typeset a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255, 255, 255, 0.15);
+}
+.md-typeset a:hover {
+  text-decoration-color: var(--hypr-pink);
+}
+
+/* Tables: borders + row hover to match dark aesthetic */
+.md-typeset table:not([class]) {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.md-typeset table:not([class]) thead th {
+  background: color-mix(in oklab, var(--hypr-darker) 92%, black);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.md-typeset table:not([class]) td,
+.md-typeset table:not([class]) th {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+.md-typeset table:not([class]) tbody tr:hover {
+  background: color-mix(in oklab, var(--hypr-dark) 85%, #111);
+}
+
+/* Inline code: subtle border to pop from background */
+.md-typeset code:not(pre code) {
+  background-color: var(--md-code-bg-color);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 0.1em 0.25em;
+}

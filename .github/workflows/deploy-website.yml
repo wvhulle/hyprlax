@@ -13,6 +13,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      BUNNY_PUBLIC_BASE_URL: https://hyprlax.com
     
     steps:
     - name: Checkout code
@@ -48,6 +50,30 @@ jobs:
         storage-zone-password: ${{ secrets.BUNNY_STORAGE_PASSWORD }}
         concurrency: "50"
         enable-delete-action: true
-        enable-purge-pull-zone: true
-        pull-zone-id: ${{ secrets.BUNNY_PULL_ZONE_ID }}
+        enable-purge-pull-zone: false
         replication-timeout: "15000"
+
+    - name: Purge Bunny CDN URLs (root)
+      if: ${{ success() && secrets.BUNNY_API_KEY }}
+      env:
+        BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+      run: |
+        set -euo pipefail
+        echo "Purging URLs under ${BUNNY_PUBLIC_BASE_URL}"
+        # Purge files from build output
+        mapfile -d '' FILES < <(find website/dist -type f -print0)
+        for file in "${FILES[@]}"; do
+          rel="${file#website/dist/}"
+          url="${BUNNY_PUBLIC_BASE_URL%/}/${rel}"
+          echo "PURGE $url"
+          curl -sS -X POST -H "AccessKey: ${BUNNY_API_KEY}" -G \
+            --data-urlencode "url=$url" \
+            "https://api.bunny.net/purge" || true
+        done
+        # Also purge base index and 404 explicitly
+        curl -sS -X POST -H "AccessKey: ${BUNNY_API_KEY}" -G \
+          --data-urlencode "url=${BUNNY_PUBLIC_BASE_URL%/}/" \
+          "https://api.bunny.net/purge" || true
+        curl -sS -X POST -H "AccessKey: ${BUNNY_API_KEY}" -G \
+          --data-urlencode "url=${BUNNY_PUBLIC_BASE_URL%/}/404.html" \
+          "https://api.bunny.net/purge" || true

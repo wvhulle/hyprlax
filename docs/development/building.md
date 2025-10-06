@@ -19,9 +19,8 @@ sudo apt install \
     pkg-config \
     libwayland-dev \
     wayland-protocols \
-    libegl-dev \
-    libgles2-mesa-dev \
-    libtoml-dev
+    libegl1-mesa-dev \
+    libgles2-mesa-dev
 ```
 
 #### Fedora
@@ -31,8 +30,7 @@ sudo dnf install \
     wayland-devel \
     wayland-protocols-devel \
     mesa-libEGL-devel \
-    mesa-libGLES-devel \
-    toml-c-devel
+    mesa-libGLES-devel
 ```
 
 #### Arch Linux
@@ -41,8 +39,7 @@ sudo pacman -S \
     base-devel \
     wayland \
     wayland-protocols \
-    mesa \
-    tomlc99
+    mesa
 ```
 
 #### Alpine Linux
@@ -52,8 +49,7 @@ sudo apk add \
     pkgconfig \
     wayland-dev \
     wayland-protocols \
-    mesa-dev \
-    tomlc99-dev
+    mesa-dev
 ```
 
 ## Getting the Source
@@ -223,7 +219,7 @@ pkg-config --libs egl glesv2
 sudo apt install libgl1-mesa-dev  # Debian/Ubuntu
 ```
 
-### TOML Library Issues
+### TOML Library
 No external TOML library is required; a vendor copy is included and built automatically.
 
 ## Troubleshooting

@@ -7,7 +7,7 @@ Solutions to common issues with hyprlax.
 ### Build Errors
 
 #### Missing Dependencies
-```
+```text
 fatal error: wayland-client.h: No such file or directory
 ```
 
@@ -24,7 +24,7 @@ sudo dnf install wayland-devel wayland-protocols-devel
 ```
 
 #### OpenGL/EGL Errors
-```
+```text
 fatal error: EGL/egl.h: No such file or directory
 ```
 
@@ -41,7 +41,7 @@ sudo dnf install mesa-libEGL-devel mesa-libGLES-devel
 ```
 
 #### Wayland Scanner Not Found
-```
+```text
 make: wayland-scanner: Command not found
 ```
 
@@ -222,7 +222,7 @@ which hyprlax
 ### GPU/Driver Problems
 
 #### OpenGL Errors
-```
+```text
 Failed to create EGL context
 ```
 
@@ -257,7 +257,7 @@ Failed to create EGL context
 ### Wayland Issues
 
 #### Layer Shell Not Supported
-```
+```text
 Error: wlr-layer-shell not supported
 ```
 
@@ -265,11 +265,11 @@ Error: wlr-layer-shell not supported
 - Hyprland (recommended)
 - Sway
 - River
-- Wayfire
 
 Not compatible:
 - GNOME Wayland
 - KDE Wayland (without layer-shell)
+- Wayfire (blocked; see issue #40)
 
 ## Configuration Issues
 

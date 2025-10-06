@@ -1,0 +1,66 @@
+site_name: Hyprlax Documentation
+site_description: Smooth parallax wallpaper daemon for Hyprland
+site_url: https://hyprlax.com/docs/
+
+docs_dir: docs
+# Build to a temp directory; workflow uploads to Bunny at /docs/
+site_dir: _site_mkdocs
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+
+extra_css:
+  - docs_theme/extra.css
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quick Start: getting-started/quick-start.md
+      - Installation: getting-started/installation.md
+      - Compatibility: getting-started/compatibility.md
+  - Configuration:
+      - Migration Guide: configuration/migration-guide.md
+      - TOML Reference: configuration/toml-reference.md
+      - Environment: configuration/environment.md
+      - Legacy Format: configuration/legacy-format.md
+  - Guides:
+      - Animation: guides/animation.md
+      - Multi-layer: guides/multi-layer.md
+      - Cursor Tracking: guides/cursor-tracking.md
+      - Performance: guides/performance.md
+      - Examples: guides/examples.md
+      - IPC Overview: guides/ipc-overview.md
+      - Troubleshooting: guides/troubleshooting.md
+  - Reference:
+      - CLI: reference/cli.md
+      - IPC Commands: reference/ipc-commands.md
+      - Easing Functions: reference/easing-functions.md
+      - Environment Variables: reference/environment-vars.md
+  - Development:
+      - Overview: development/README.md
+      - Building: development/building.md
+      - Testing: development/testing.md
+      - Contributing: development/contributing.md
+      - Architecture: development/architecture.md

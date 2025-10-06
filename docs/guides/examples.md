@@ -6,20 +6,32 @@ A curated list of ready-to-run wallpaper examples bundled with hyprlax. Each exa
 
 ## Mountains
 - Path: `examples/mountains/`
-- Config: `parallax.conf` (legacy) — convert to TOML if desired
-- Run: `./hyprlax --config examples/mountains/parallax.conf`
+- Config: `parallax.conf` (legacy)
+- Run (legacy): `./hyprlax --config examples/mountains/parallax.conf`
+- TOML conversion:
+  - `hyprlax ctl convert-config examples/mountains/parallax.conf examples/mountains/hyprlax.toml --yes`
+  - Run (TOML): `./hyprlax --config examples/mountains/hyprlax.toml`
+- Migration: See [Migration Guide](../configuration/migration-guide.md)
 - Docs: [README.md](../../examples/mountains/README.md)
 
 ## City
 - Path: `examples/city/`
-- Config: `parallax.conf` (legacy) — convert to TOML if desired
-- Run: `./hyprlax --config examples/city/parallax.conf`
+- Config: `parallax.conf` (legacy)
+- Run (legacy): `./hyprlax --config examples/city/parallax.conf`
+- TOML conversion:
+  - `hyprlax ctl convert-config examples/city/parallax.conf examples/city/hyprlax.toml --yes`
+  - Run (TOML): `./hyprlax --config examples/city/hyprlax.toml`
+- Migration: See [Migration Guide](../configuration/migration-guide.md)
 - Docs: [README.md](../../examples/city/README.md)
 
 ## Abstract Geometric
 - Path: `examples/abstract/`
-- Config: `parallax.conf` (legacy) — convert to TOML if desired
-- Run: `./hyprlax --config examples/abstract/parallax.conf`
+- Config: `parallax.conf` (legacy)
+- Run (legacy): `./hyprlax --config examples/abstract/parallax.conf`
+- TOML conversion:
+  - `hyprlax ctl convert-config examples/abstract/parallax.conf examples/abstract/hyprlax.toml --yes`
+  - Run (TOML): `./hyprlax --config examples/abstract/hyprlax.toml`
+- Migration: See [Migration Guide](../configuration/migration-guide.md)
 - Docs: [README.md](../../examples/abstract/README.md)
 
 ## Pixel City (Pixel Art)
@@ -36,13 +48,21 @@ A curated list of ready-to-run wallpaper examples bundled with hyprlax. Each exa
 ## Space
 - Path: `examples/space/`
 - Config: `parallax.conf` (legacy)
-- Run: `./hyprlax --config examples/space/parallax.conf`
+- Run (legacy): `./hyprlax --config examples/space/parallax.conf`
+- TOML conversion:
+  - `hyprlax ctl convert-config examples/space/parallax.conf examples/space/hyprlax.toml --yes`
+  - Run (TOML): `./hyprlax --config examples/space/hyprlax.toml`
+- Migration: See [Migration Guide](../configuration/migration-guide.md)
 - Docs: [README.md](../../examples/space/README.md)
 
 ## Multi-Layer Basics
 - Path: `examples/multi/`
 - Config: `parallax.conf` (legacy)
-- Run: `./hyprlax --config examples/multi/parallax.conf`
+- Run (legacy): `./hyprlax --config examples/multi/parallax.conf`
+- TOML conversion:
+  - `hyprlax ctl convert-config examples/multi/parallax.conf examples/multi/hyprlax.toml --yes`
+  - Run (TOML): `./hyprlax --config examples/multi/hyprlax.toml`
+- Migration: See [Migration Guide](../configuration/migration-guide.md)
 - Docs: [README.md](../../examples/multi/README.md)
 
 ## Mouse Parallax (Cursor-Driven)
@@ -61,6 +81,7 @@ A curated list of ready-to-run wallpaper examples bundled with hyprlax. Each exa
 ---
 
 Tips
-- Convert legacy configs to TOML once via: `hyprlax ctl convert-config <in.conf> <out.toml> --yes`
+- Convert legacy configs to TOML once via:
+  - `hyprlax ctl convert-config <in.conf> <out.toml> --yes`
 - Examples are great templates — copy a directory and swap in your own art
 - For more options, see the [TOML reference](../configuration/toml-reference.md) and [guides](./)

@@ -38,191 +38,23 @@ Coverage targets are not currently provided by the build; use external tools if 
 
 ## Test Structure
 
-### Test Framework
-```c
-// tests/test_framework.h
-#define TEST_ASSERT(condition) \
-    if (!(condition)) { \
-        printf("FAIL: %s:%d: %s\n", __FILE__, __LINE__, #condition); \
-        return 1; \
-    }
+Tests are simple C programs. Many use the Check framework (linked via pkg-config in the Makefile). The suite covers core modules, renderer, compositor/platform adapters, IPC, and configuration loaders.
 
-#define TEST_ASSERT_EQUAL(expected, actual) \
-    TEST_ASSERT((expected) == (actual))
+### Available Test Suites (examples)
+- `tests/test_easing` – easing values and parsing
+- `tests/test_animation` – animation state and timing
+- `tests/test_config` / `tests/test_toml_config` – config parsing
+- `tests/test_ipc` – IPC server/client operations
+- `tests/test_renderer` – renderer scaffolding and shader checks
+- `tests/test_platform` – platform abstraction
+- `tests/test_compositor` – compositor detection/capabilities
+- `tests/test_workspace_changes` – workspace events
 
-#define TEST_RUN(test) \
-    printf("Running %s...", #test); \
-    if (test() == 0) printf(" PASS\n"); \
-    else { printf(" FAIL\n"); failures++; }
-```
-
-### Test File Template
-```c
-// tests/test_example.c
-#include "test_framework.h"
-#include "../src/module.h"
-
-static int test_basic_functionality(void) {
-    // Arrange
-    struct data input = {.value = 10};
-    
-    // Act
-    int result = process_data(&input);
-    
-    // Assert
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(20, input.value);
-    
-    return 0;
-}
-
-static int test_error_handling(void) {
-    // Test NULL input
-    int result = process_data(NULL);
-    TEST_ASSERT_EQUAL(-1, result);
-    
-    return 0;
-}
-
-int main(void) {
-    int failures = 0;
-    
-    printf("=== Example Tests ===\n");
-    TEST_RUN(test_basic_functionality);
-    TEST_RUN(test_error_handling);
-    
-    printf("\nResults: %s\n", failures ? "FAILED" : "PASSED");
-    return failures ? 1 : 0;
-}
-```
-
-## Test Categories
-
-### Unit Tests
-
-Test individual functions in isolation:
-
-```c
-// tests/test_easing.c
-static int test_linear_easing(void) {
-    float result = ease_linear(0.5);
-    TEST_ASSERT_FLOAT_EQUAL(0.5, result, 0.001);
-    return 0;
-}
-
-static int test_expo_easing(void) {
-    // Test boundaries
-    TEST_ASSERT_FLOAT_EQUAL(0.0, ease_out_expo(0.0), 0.001);
-    TEST_ASSERT_FLOAT_EQUAL(1.0, ease_out_expo(1.0), 0.001);
-    
-    // Test midpoint
-    float mid = ease_out_expo(0.5);
-    TEST_ASSERT(mid > 0.4 && mid < 0.6);
-    
-    return 0;
-}
-```
-
-### Integration Tests
-
-Test component interactions:
-
-```c
-// tests/test_layer_rendering.c
-static int test_multi_layer_render(void) {
-    // Create test layers
-    struct layer layers[3];
-    create_test_layers(layers, 3);
-    
-    // Initialize renderer
-    struct renderer *r = renderer_create();
-    TEST_ASSERT(r != NULL);
-    
-    // Render frame
-    int result = renderer_draw_frame(r, layers, 3);
-    TEST_ASSERT_EQUAL(0, result);
-    
-    // Cleanup
-    renderer_destroy(r);
-    return 0;
-}
-```
-
-### Platform Tests
-
-Test platform-specific functionality:
-
-```c
-// tests/test_platform_wayland.c
-static int test_wayland_connection(void) {
-    struct platform *p = platform_create("wayland");
-    TEST_ASSERT(p != NULL);
-    
-    // Test display connection
-    TEST_ASSERT(p->display != NULL);
-    
-    // Test window creation
-    struct window *w = platform_create_window(p, 1920, 1080);
-    TEST_ASSERT(w != NULL);
-    
-    platform_destroy(p);
-    return 0;
-}
-```
-
-### Configuration Tests
-
-Test config parsing and validation:
-
-```c
-// tests/test_config.c
-static int test_toml_parsing(void) {
-    const char *config = "[global]\nfps = 60\n";
-    
-    struct config cfg;
-    int result = config_parse_string(&cfg, config);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(60, cfg.fps);
-    
-    return 0;
-}
-
-static int test_invalid_config(void) {
-    const char *config = "[global]\nfps = -1\n";
-    
-    struct config cfg;
-    int result = config_parse_string(&cfg, config);
-    TEST_ASSERT_EQUAL(-1, result); // Should fail
-    
-    return 0;
-}
-```
+Note: `make test` builds and runs all present `tests/test_*.c` binaries.
 
 ## Test Data
 
-### Test Images
-```bash
-# Generate test images
-tests/generate_test_images.sh
-
-# Test images location
-tests/data/
-├── test_1920x1080.png
-├── test_3840x2160.png
-├── test_transparent.png
-└── test_corrupted.jpg
-```
-
-### Test Configurations
-```toml
-# tests/data/test_basic.toml
-[global]
-fps = 60
-debug = true
-
-[[global.layers]]
-path = "tests/data/test_1920x1080.png"
-```
+Tests create their own data where needed. No image generation scripts are required.
 
 ## Performance Tests
 
@@ -257,31 +89,13 @@ valgrind --tool=massif ./hyprlax test.jpg
 ms_print massif.out.*
 
 # Check for leaks
-valgrind --leak-check=full --show-leak-kinds=all ./hyprlax test.jpg
+valgrind --leak-check=full --show-leak-kinds=all ./tests/test_config
 ```
 
-## Mock Objects
+## Environment helpers
 
-### Mock Compositor
-```c
-// tests/mocks/mock_compositor.c
-struct compositor *mock_compositor_create(void) {
-    struct compositor *c = calloc(1, sizeof(*c));
-    c->ops = &mock_compositor_ops;
-    c->mock_workspace = 1;
-    return c;
-}
-
-static int mock_get_workspace(struct compositor *c) {
-    return c->mock_workspace;
-}
-
-static struct compositor_ops mock_compositor_ops = {
-    .get_active_workspace = mock_get_workspace,
-    .init = mock_init,
-    .cleanup = mock_cleanup,
-};
-```
+- `HYPRLAX_SOCKET_SUFFIX` to isolate IPC sockets during tests
+- `HYPRLAX_INIT_TRACE=1` to trace init and argument/config parsing
 
 ## Test Utilities
 
@@ -341,7 +155,6 @@ jobs:
 ### Before Commit
 - [ ] All tests pass: `make test`
 - [ ] No memory leaks: `make memcheck`
-- [ ] Coverage maintained: `make coverage`
 - [ ] New features have tests
 - [ ] Edge cases tested
 

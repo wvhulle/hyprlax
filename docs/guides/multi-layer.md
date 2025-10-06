@@ -32,24 +32,33 @@ hyprlax --layer background.jpg:0.3:1.0:3.0 \
         --layer foreground.png:1.0:0.6
 ```
 
-### Method 2: Configuration File
+### Method 2: Configuration File (TOML)
 
 Create `~/.config/hyprlax/hyprlax.toml`:
 
-```bash
-# Background layer - distant mountains
-layer /path/to/mountains.jpg 0.3 1.0 3.0
+```toml
+[global]
+duration = 1.2
+shift = 250
+easing = "expo"
 
-# Midground - trees
-layer /path/to/trees.png 0.6 0.8 1.5
+[[global.layers]]
+path = "/path/to/mountains.jpg"
+shift_multiplier = 0.3
+opacity = 1.0
+blur = 3.0
 
-# Foreground - grass
-layer /path/to/grass.png 1.0 0.7 0.0
+[[global.layers]]
+path = "/path/to/trees.png"
+shift_multiplier = 0.6
+opacity = 0.8
+blur = 1.5
 
-# Animation settings
-duration 1.2
-shift 250
-easing expo
+[[global.layers]]
+path = "/path/to/grass.png"
+shift_multiplier = 1.0
+opacity = 0.7
+blur = 0.0
 ```
 
 Then run:

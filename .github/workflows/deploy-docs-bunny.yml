@@ -1,0 +1,103 @@
+name: Deploy Docs to Bunny
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'docs_theme/**'
+      - '.github/workflows/deploy-docs-bunny.yml'
+  workflow_dispatch:
+    inputs:
+      purge_only:
+        description: 'Purge CDN cache without upload (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      BUNNY_STORAGE_HOST: storage.bunnycdn.com
+      BUNNY_DOCS_PREFIX: docs
+      BUNNY_PUBLIC_BASE_URL: https://hyprlax.com/docs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs mkdocs-material
+
+      - name: Build MkDocs
+        run: |
+          mkdocs build -f mkdocs.yml
+
+      - name: Upload docs to Bunny Storage
+        if: ${{ (github.event.inputs.purge_only != 'true') && secrets.BUNNY_STORAGE_ZONE && secrets.BUNNY_STORAGE_PASSWORD }}
+        env:
+          BUNNY_STORAGE_ZONE: ${{ secrets.BUNNY_STORAGE_ZONE }}
+          BUNNY_STORAGE_PASSWORD: ${{ secrets.BUNNY_STORAGE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "Uploading _site_mkdocs -> /${BUNNY_DOCS_PREFIX}/ on Bunny Storage zone ${BUNNY_STORAGE_ZONE}"
+          # Optional: attempt to clear the docs directory (ignore if not supported)
+          curl -sS -X DELETE \
+            -H "AccessKey: ${BUNNY_STORAGE_PASSWORD}" \
+            "https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${BUNNY_DOCS_PREFIX}" || true
+
+          # Upload files
+          mapfile -d '' FILES < <(find _site_mkdocs -type f -print0)
+          for file in "${FILES[@]}"; do
+            rel="${file#_site_mkdocs/}"
+            url="https://${BUNNY_STORAGE_HOST}/${BUNNY_STORAGE_ZONE}/${BUNNY_DOCS_PREFIX}/${rel}"
+            echo "PUT $rel"
+            curl -sS -X PUT -T "$file" \
+              -H "AccessKey: ${BUNNY_STORAGE_PASSWORD}" \
+              "$url" \
+              || { echo "Failed to upload: $rel"; exit 1; }
+          done
+          echo "Upload complete."
+
+      - name: Purge Bunny CDN URLs under /docs/
+        if: ${{ secrets.BUNNY_API_KEY }}
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          BUNNY_PULL_ZONE_ID: ${{ secrets.BUNNY_PULL_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${BUNNY_PUBLIC_BASE_URL:-}" ]]; then
+            echo "BUNNY_PUBLIC_BASE_URL not set; falling back to zone purge." >&2
+            if [[ -n "${BUNNY_PULL_ZONE_ID:-}" ]]; then
+              curl -sS -X POST -H "AccessKey: ${BUNNY_API_KEY}" \
+                "https://api.bunny.net/pullzone/${BUNNY_PULL_ZONE_ID}/purgeCache" || true
+            else
+              echo "BUNNY_PULL_ZONE_ID not set; skipping purge." >&2
+            fi
+            exit 0
+          fi
+
+          echo "Purging individual docs URLs under ${BUNNY_PUBLIC_BASE_URL}"
+          mapfile -d '' FILES < <(find _site_mkdocs -type f -print0)
+          for file in "${FILES[@]}"; do
+            rel="${file#_site_mkdocs/}"
+            url="${BUNNY_PUBLIC_BASE_URL%/}/${rel}"
+            echo "PURGE $url"
+            curl -sS -X POST -H "AccessKey: ${BUNNY_API_KEY}" -G \
+              --data-urlencode "url=$url" \
+              "https://api.bunny.net/purge" || true
+          done
+          # Also purge the docs index itself
+          curl -sS -X POST -H "AccessKey: ${BUNNY_API_KEY}" -G \
+            --data-urlencode "url=${BUNNY_PUBLIC_BASE_URL%/}/" \
+            "https://api.bunny.net/purge" || true

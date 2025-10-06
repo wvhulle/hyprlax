@@ -5,7 +5,7 @@ Quick reference for the hyprlax command-line interface.
 ## Usage
 
 ```bash
-hyprlax [OPTIONS] [--layer <image:shift:opacity:blur> ...]
+hyprlax [OPTIONS] [--layer <image:shift:opacity:blur[:#RRGGBB[:strength]]> ...]
 hyprlax ctl <COMMAND> [ARGS...]
 ```
 
@@ -23,6 +23,9 @@ hyprlax ctl <COMMAND> [ARGS...]
 | `-r` | `--renderer` | string | auto | Renderer backend: `gles2`, `auto` |
 | `-p` | `--platform` | string | auto | Platform backend: `wayland`, `auto` |
 | | `--verbose` | level | - | Log level: `error|warn|info|debug|trace` or `0..4` |
+| | `--primary-only` | flag | off | Use only the primary monitor |
+| | `--monitor` | string | - | Include specific monitor (repeatable) |
+| | `--disable-monitor` | string | - | Exclude a specific monitor (repeatable) |
 
 ## Display/Timing
 
@@ -73,10 +76,12 @@ hyprlax ctl <COMMAND> [ARGS...]
 
 ### Layer Format
 ```bash
---layer /path/to/image.png:1.0:0.9:2.0
-#       └─ image path ─────┘ │   │   └─ blur (optional)
-#                           │   └─ opacity (0.0-1.0)
-#                           └─ shift multiplier (0.0-2.0)
+--layer /path/to/image.png:1.0:0.9:2.0:#AABBCC:0.5
+#       └─ image path ─────┘ │   │   │    │      └─ tint strength (0.0-1.0, optional)
+#                            │   │   │    └─ tint color (#RRGGBB, optional; use 'none' to disable)
+#                            │   │   └─ blur amount (optional)
+#                            │   └─ opacity (0.0-1.0)
+#                            └─ shift multiplier (0.0-2.0)
 ```
 
 ## Easing Functions
@@ -162,7 +167,7 @@ hyprlax --compositor hyprland image.jpg
 # Use generic Wayland
 hyprlax --compositor generic image.jpg
 
-# Note: River, Niri and Wayfire are auto-detected; manual values are not accepted yet.
+# Manual selection accepts: hyprland, niri, river, sway, generic.
 ```
 
 ### Runtime Control

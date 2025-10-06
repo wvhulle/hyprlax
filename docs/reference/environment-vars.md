@@ -35,6 +35,23 @@ export HYPRLAX_VERBOSE=3  # debug
 hyprlax image.jpg
 ```
 
+### HYPRLAX_INIT_TRACE
+Enable detailed init-time tracing for argument/config/env processing.
+
+Values: any non-empty string to enable
+
+```bash
+export HYPRLAX_INIT_TRACE=1
+hyprlax --config ./config.toml 2>init-trace.log
+```
+
+### Configuration Overrides
+Environment variables that override config values at startup (CLI still wins):
+
+- `HYPRLAX_RENDER_FPS` — target FPS (e.g., `60`, `144`)
+- `HYPRLAX_PARALLAX_SHIFT_PIXELS` — base shift in pixels (float)
+- `HYPRLAX_ANIMATION_DURATION` — animation duration in seconds (float)
+
 ### Rendering/Performance Tweaks
 
 The renderer recognizes the following variables:
@@ -208,9 +225,8 @@ hyprlax --debug image.jpg
 #!/bin/bash
 # Development environment
 export HYPRLAX_DEBUG=1
-export HYPRLAX_CONFIG=./test-config.toml
 export WAYLAND_DEBUG=1
-hyprlax test-image.jpg
+hyprlax --config ./test-config.toml test-image.jpg
 ```
 
 ### Production Setup
@@ -218,8 +234,7 @@ hyprlax test-image.jpg
 #!/bin/bash
 # Production environment
 unset HYPRLAX_DEBUG
-export HYPRLAX_CONFIG=~/.config/hyprlax/production.toml
-hyprlax ~/wallpapers/current.jpg
+hyprlax --config ~/.config/hyprlax/production.toml ~/wallpapers/current.jpg
 ```
 
 ### Compositor Override
@@ -260,8 +275,8 @@ This shows which environment variables hyprlax detected.
 When multiple configuration methods exist:
 
 1. Command-line arguments (highest priority)
-2. Configuration file
-3. Environment variables
+2. Environment variables
+3. Configuration file
 4. Built-in defaults (lowest priority)
 
 Example:

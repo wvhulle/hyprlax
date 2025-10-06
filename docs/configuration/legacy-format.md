@@ -10,7 +10,7 @@ Legacy configuration files use a simple line-based format:
 
 ```bash
 # Comments start with #
-# Commands are: layer, duration, shift, easing, delay, fps
+# Commands are: layer, duration, shift, easing, fps, vsync, idle_poll_rate, scale
 
 # Add layers (required for multi-layer mode)
 layer <image_path> <shift> <opacity> [blur]
@@ -19,8 +19,10 @@ layer <image_path> <shift> <opacity> [blur]
 duration <seconds>
 shift <pixels>
 easing <type>
-delay <seconds>
 fps <rate>
+vsync <0|1>
+idle_poll_rate <hz>
+scale <multiplier>
 ```
 
 ## Commands
@@ -57,16 +59,28 @@ easing expo
 
 Available: linear, cubic, quart, quint, sine, expo, circ, elastic, back, bounce
 
-### delay
-Set animation delay in seconds:
-```bash
-delay 0.2
-```
-
 ### fps
 Set target frame rate:
 ```bash
 fps 60
+```
+
+### vsync
+Enable or disable vertical sync:
+```bash
+vsync 1
+```
+
+### idle_poll_rate
+Set idle polling rate in Hertz:
+```bash
+idle_poll_rate 2.0
+```
+
+### scale
+Uniform content scale multiplier (applied to layers emitted by converter):
+```bash
+scale 1.1
 ```
 
 ## Example Configuration

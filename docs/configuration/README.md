@@ -46,8 +46,9 @@ See [Legacy Format](legacy-format.md) for syntax.
 Settings are applied in this order (later overrides earlier):
 1. Built-in defaults
 2. Configuration file (TOML)
-3. Command-line arguments
-4. Runtime IPC commands
+3. Environment variables
+4. Command-line arguments
+5. Runtime IPC commands
 
 ## File Locations
 

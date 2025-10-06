@@ -9,7 +9,6 @@
 | **Niri** | ✅ Stable | ⚠️ Single tested | ✅ Yes | ✅ Yes | ✅ Yes | Multi-monitor untested |
 | **Sway** | ⚠️ Partial | ✅ Yes | ⚠️ Basic | ✅ Yes | ✅ Yes | i3 IPC compatibility mode |
 | **Wayfire** | ❌ Blocked | - | - | - | - | Renderer issues (#40) |
-| **KDE Plasma** | 🔄 Planned | - | - | - | - | Future support |
 | **GNOME** | 🔄 Planned | - | - | - | - | Future support |
 
 ### Legend
@@ -71,8 +70,7 @@ Force a specific compositor:
 hyprlax --compositor hyprland image.jpg
 hyprlax --compositor sway image.jpg
 hyprlax --compositor generic image.jpg
-# Note: River, Niri and Wayfire are auto-detected; manual selection currently
-# accepts only: hyprland, sway, generic.
+# Manual selection accepts: hyprland, niri, river, sway, generic.
 ```
 
 ## Testing Your Compositor

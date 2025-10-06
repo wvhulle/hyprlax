@@ -9,7 +9,7 @@ For the full command reference, see: reference/ipc-commands.md.
 
 ```bash
 # Add a layer
-hyprlax ctl add /path/to/img.png 1.2 0.9 0
+hyprlax ctl add /path/to/img.png shift_multiplier=1.2 opacity=0.9 z=0
 
 # Modify layer properties
 hyprlax ctl modify 1 opacity 0.5
@@ -17,8 +17,8 @@ hyprlax ctl modify 1 shift_multiplier 0.8
 
 # UV pan (normalized): shifts the sampled texture
 # Typical range: -0.10 .. 0.10 (1.00 = full texture width/height)
-hyprlax ctl modify 1 uv_offset.x 0.05
-hyprlax ctl modify 1 uv_offset.y -0.02
+hyprlax ctl modify 1 x 0.05
+hyprlax ctl modify 1 y -0.02
 
 # Z-order (ascending): lower z draws first (behind)
 hyprlax ctl modify 1 z 10
@@ -96,5 +96,5 @@ If you need pixel-accurate positioning in screen space, consider using per-pixel
 
 ```bash
 hyprlax ctl status           # add --json for machine-readable output
-hyprlax ctl reload           # reload config (TOML or legacy fallback)
+hyprlax ctl reload           # reload config (TOML only; legacy paths will print a conversion hint)
 ```

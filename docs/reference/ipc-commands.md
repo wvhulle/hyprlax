@@ -14,7 +14,7 @@ hyprlax ctl <command> [arguments...]
 Add a new image layer (IPC overlay). Optional parameters are key=value pairs.
 
 ```bash
-hyprlax ctl add <image_path> [shift_multiplier=..] [opacity=..] [uv_offset.x=..] [uv_offset.y=..] [z=..]
+hyprlax ctl add <image_path> [shift_multiplier=..] [opacity=..] [x=..] [y=..] [z=..]
 ```
 
 Optional keys:
@@ -23,8 +23,8 @@ Optional keys:
 |-----|------|---------|-------|-------------|
 | `shift_multiplier` | float | 1.0 | 0.0-5.0 | Per-layer parallax multiplier (0.0=static, 1.0=normal) |
 | `opacity` | float | 1.0 | 0.0-1.0 | Transparency |
-| `uv_offset.x` | float | 0.0 | any | UV pan X offset (normalized; typical -0.10..0.10) |
-| `uv_offset.y` | float | 0.0 | any | UV pan Y offset (normalized; typical -0.10..0.10) |
+| `x` | float | 0.0 | any | UV pan X offset (normalized; typical -0.10..0.10). Alias: `uv_offset.x` |
+| `y` | float | 0.0 | any | UV pan Y offset (normalized; typical -0.10..0.10). Alias: `uv_offset.y` |
 | `z` | int | next | 0-31 | Z-order (layer stack position) |
 
 **Example:**
@@ -55,8 +55,8 @@ hyprlax ctl modify <layer_id> <property> <value>
 |----------|------|-------|-------------|
 | `shift_multiplier` | float | 0.0-5.0 | Per-layer parallax multiplier (0.0 disables movement) |
 | `opacity` | float | 0.0-1.0 | Transparency |
-| `uv_offset.x` | float | any | UV pan X offset (normalized; typical -0.10..0.10) |
-| `uv_offset.y` | float | any | UV pan Y offset (normalized; typical -0.10..0.10) |
+| `x` | float | any | UV pan X offset (normalized; typical -0.10..0.10). Alias: `uv_offset.x` |
+| `y` | float | any | UV pan Y offset (normalized; typical -0.10..0.10). Alias: `uv_offset.y` |
 | `z` | int | 0-31 | Z-order (layer stack position) |
 | `visible` | bool | true/false, 1/0 | Visibility toggle |
 | `hidden` | bool | true/false | Deprecated; prefer `visible` |
@@ -71,6 +71,7 @@ hyprlax ctl modify <layer_id> <property> <value>
 | `margin_px.x` | float | px | Safe margin X (px) when overflow none |
 | `margin_px.y` | float | px | Safe margin Y (px) when overflow none |
 | `path` | string | file path | Image path; reloads texture |
+| `tint` | string | - | `#RRGGBB[:strength]` or `none` |
 
 **Examples:**
 ```bash
@@ -118,11 +119,16 @@ hyprlax ctl set <property> <value>
 | `parallax.shift_pixels` | float | 0-1000 | Base parallax shift (pixels) |
 | `animation.duration` | float | 0.1-10.0 | Animation duration (seconds) |
 | `animation.easing` | string | see list | Easing function name |
+| `render.accumulate` | bool | true/false | Enable trails effect |
+| `render.trail_strength` | float | 0.0-1.0 | Per-frame fade when accumulating |
+| `render.overflow` | string | repeat_edge/repeat/repeat_x/repeat_y/none | Texture overflow mode |
+| `render.tile.x` | bool | true/false | Tiling on X |
+| `render.tile.y` | bool | true/false | Tiling on Y |
+| `render.margin_px.x` | float | px | Safe margin X (px) when overflow none |
+| `render.margin_px.y` | float | px | Safe margin Y (px) when overflow none |
+| `debug` | bool | true/false | Debug output toggle |
 
 Aliases (kept for compatibility): `fps`, `shift`, `duration`, `easing`.
-| `blur_passes` | int | 0-5 | Number of blur passes |
-| `blur_size` | int | 3-31 (odd) | Blur kernel size |
-| `debug` | bool | true/false | Debug output toggle |
 
 Additional structured keys:
 
@@ -216,10 +222,8 @@ done
 # Lower quality when on battery
 if [[ $(cat /sys/class/power_supply/AC/online) == "0" ]]; then
     hyprlax ctl set fps 30
-    hyprlax ctl set blur_passes 1
 else
     hyprlax ctl set fps 144
-    hyprlax ctl set blur_passes 3
 fi
 ```
 
@@ -263,9 +267,6 @@ When running `hyprlax ctl status --json`, a compact JSON object is returned. Fie
 - `debug`: boolean
 - `caps`: object with compositor capability flags
 - `monitors`: array of monitor objects with `name`, `size`, `pos`, `scale`, `refresh`, `caps`
-- `debug`: boolean
-- `caps`: capability flags
-- `monitors`: array of monitor objects `{ name, size, pos, scale, refresh, caps }`
 
 ## IPC Error Codes (optional)
 

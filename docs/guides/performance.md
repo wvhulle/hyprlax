@@ -176,12 +176,12 @@ Look for `[RENDER_DIAG]` lines when idle - there shouldn't be any.
 if [[ $(cat /sys/class/power_supply/AC/online) == "0" ]]; then
     # On battery
     hyprlax ctl set fps 30
-    hyprlax ctl set blur_passes 1
+# Tip: prefer environment variables for blur quality (see above)
     export HYPRLAX_FRAME_CALLBACK=1
 else
     # On AC power
     hyprlax ctl set fps 144
-    hyprlax ctl set blur_passes 2
+# Tip: prefer environment variables for blur quality (see above)
     unset HYPRLAX_FRAME_CALLBACK
 fi
 ```
@@ -244,9 +244,7 @@ fps = 30
 vsync = true
 debug = false
 
-# Minimal blur
-blur_passes = 1
-blur_size = 5
+# Blur quality is controlled via environment variables (e.g., HYPRLAX_SEPARABLE_BLUR, HYPRLAX_BLUR_DOWNSCALE)
 
 # Single layer or minimal layers
 [[global.layers]]
@@ -260,9 +258,7 @@ blur = 0.0
 fps = 60
 vsync = true
 
-# Balanced blur
-blur_passes = 2
-blur_size = 9
+# Blur quality is controlled via environment variables (e.g., HYPRLAX_SEPARABLE_BLUR, HYPRLAX_BLUR_DOWNSCALE)
 
 # Multiple layers OK
 [[global.layers]]
@@ -282,9 +278,7 @@ shift_multiplier = 1.0
 fps = 144
 vsync = true
 
-# Quality blur
-blur_passes = 3
-blur_size = 15
+# Blur quality is controlled via environment variables (e.g., HYPRLAX_SEPARABLE_BLUR, HYPRLAX_BLUR_DOWNSCALE)
 
 # Many layers with effects
 [[global.layers]]

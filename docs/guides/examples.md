@@ -84,4 +84,4 @@ Tips
 - Convert legacy configs to TOML once via:
   - `hyprlax ctl convert-config <in.conf> <out.toml> --yes`
 - Examples are great templates — copy a directory and swap in your own art
-- For more options, see the [TOML reference](../configuration/toml-reference.md) and the [Guides](../)
+- For more options, see the [TOML reference](../configuration/toml-reference.md) and other [Guides](multi-layer.md)

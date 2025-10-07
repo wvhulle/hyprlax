@@ -42,3 +42,6 @@ dist/
 
 #Python (examples)
 **/__pycache__
+
+#mkdocs
+_site_mkdocs/

@@ -443,3 +443,21 @@ bench-30fps:
 
 bench-clean:
 	@rm -f hyprlax-test-*.log || true
+
+# --- Documentation helpers ---
+.PHONY: docs docs-linkcheck
+
+# Build MkDocs site (requires mkdocs)
+docs:
+	@if command -v mkdocs >/dev/null 2>&1; then \
+		mkdocs build -f mkdocs.yml; \
+	elif [ -x .venv/bin/mkdocs ]; then \
+		.venv/bin/mkdocs build -f mkdocs.yml; \
+	else \
+		echo "Error: mkdocs not found. Install with 'pip install mkdocs mkdocs-material' or use .venv."; \
+		exit 1; \
+	fi
+
+# Build docs and run internal link checker
+docs-linkcheck: docs
+	@python3 scripts/docs_link_check.py

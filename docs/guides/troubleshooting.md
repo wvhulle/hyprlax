@@ -399,6 +399,6 @@ Include:
 
 ## Next Steps
 
-- Review [configuration guide](configuration.md) for setup help
+- Review [configuration guide](../configuration/README.md) for setup help
 - See [examples](examples.md) for working configurations
 - Check [multi-layer guide](multi-layer.md) for advanced features

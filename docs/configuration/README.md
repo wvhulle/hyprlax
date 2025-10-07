@@ -63,7 +63,7 @@ Moving from legacy format? See [Migration Guide](migration-guide.md).
 
 ## Examples
 
-Ready-to-use configurations are available in [examples/](examples/):
+Ready-to-use configurations are available under examples:
 - [Basic parallax](examples/basic.toml)
 - [Cursor tracking](examples/cursor-parallax.toml)  
 - [Multi-layer depth](examples/multi-layer.toml)
@@ -72,7 +72,7 @@ Ready-to-use configurations are available in [examples/](examples/):
 
 1. **New users**: Start with [TOML Reference](toml-reference.md)
 2. **Legacy users**: See [Migration Guide](migration-guide.md)
-3. **Quick setup**: Copy an [example](examples/) and customize
+3. **Quick setup**: Copy an [example](../guides/examples.md) and customize
 
 ## Validation
 

@@ -43,6 +43,10 @@ jobs:
         run: |
           mkdocs build -f mkdocs.yml
 
+      - name: Link check (internal)
+        run: |
+          python3 scripts/docs_link_check.py
+
       - name: Upload docs to Bunny Storage
         if: github.event.inputs.purge_only != 'true'
         env:

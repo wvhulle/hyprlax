@@ -244,7 +244,7 @@ align = { x = 0.8, y = 0.7 }  # Position planet
 ## Getting Help
 
 - See [TOML Reference](toml-reference.md) for all options
-- Check [Examples](examples/) for working configs
+- Check [Examples](../guides/examples.md) for working configs
 - Report issues: https://github.com/sandwichfarm/hyprlax/issues
 ### Canonical Keys and Naming
 

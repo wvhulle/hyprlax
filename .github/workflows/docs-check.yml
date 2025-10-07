@@ -1,0 +1,43 @@
+name: Docs Link Check
+
+on:
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'docs_theme/**'
+      - '.github/workflows/docs-check.yml'
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'docs_theme/**'
+      - '.github/workflows/docs-check.yml'
+
+jobs:
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs
+        run: |
+          python -m pip install --upgrade pip
+          pip install mkdocs mkdocs-material
+
+      - name: Build Docs
+        run: |
+          mkdocs build -f mkdocs.yml
+
+      - name: Run Link Checker
+        run: |
+          python3 scripts/docs_link_check.py
+

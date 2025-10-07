@@ -237,6 +237,6 @@ sudo make uninstall  # For system installation
 
 ## Next Steps
 
-- [Configure hyprlax](configuration.md) in your Hyprland config
-- Learn about [multi-layer parallax](multi-layer.md)
-- Explore [animation options](animation.md)
+- [Configure hyprlax](../configuration/README.md) in your Hyprland config
+- Learn about [multi-layer parallax](../guides/multi-layer.md)
+- Explore [animation options](../guides/animation.md)

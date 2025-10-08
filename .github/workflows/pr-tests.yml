@@ -1,0 +1,55 @@
+name: PR Tests
+
+on:
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch: {}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [ gcc, clang ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwayland-dev \
+            wayland-protocols \
+            libegl1-mesa-dev \
+            libgles2-mesa-dev \
+            pkg-config \
+            check \
+            make \
+            ${{ matrix.compiler }}
+          # Prefer static libcheck if present; otherwise attempt to install runtime
+          if pkg-config --static --libs check >/dev/null 2>&1; then
+            echo "Using static libcheck from 'check' package"
+          else
+            echo "Static libcheck not available; attempting to install runtime library"
+            if apt-cache show libcheck0 >/dev/null 2>&1; then
+              sudo apt-get install -y libcheck0
+            elif apt-cache show libcheck0t64 >/dev/null 2>&1; then
+              sudo apt-get install -y libcheck0t64
+            else
+              echo "::warning::libcheck runtime package not found (libcheck0, libcheck0t64); tests may fail to launch"
+            fi
+          fi
+
+      - name: Build hyprlax
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          make clean
+          make
+
+      - name: Run tests
+        run: |
+          make clean-tests || true
+          make test

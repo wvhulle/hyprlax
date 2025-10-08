@@ -1,22 +1,19 @@
 name: Tests
 
 on:
-  # Run on pull requests
+  # Run on all pull requests to any base branch
   pull_request:
-    branches: [ master, main ]
-    paths-ignore:
-      - '**.md'
-      - 'website/**'
-      - '.github/workflows/deploy-website.yml'
-      - '.github/workflows/release.yml'
-  # Run on pushes to master/main
+    # no branch filter: run for any base
+    {}
+  # Run on pushes to master/main (keep path filters to reduce noise)
   push:
     branches: [ master, main ]
     paths-ignore:
-      - '**.md'
       - 'website/**'
       - '.github/workflows/deploy-website.yml'
       - '.github/workflows/release.yml'
+  workflow_dispatch:
+    inputs: {}
 
 jobs:
   test:
@@ -40,6 +37,7 @@ jobs:
     
     - name: Install dependencies
       run: |
+        set -euo pipefail
         sudo apt-get update
         sudo apt-get install -y \
           libwayland-dev \
@@ -47,8 +45,21 @@ jobs:
           libegl1-mesa-dev \
           libgles2-mesa-dev \
           pkg-config \
+          check \
           make \
           ${{ matrix.compiler }}
+        if pkg-config --static --libs check >/dev/null 2>&1; then
+          echo "Using static libcheck from 'check' package"
+        else
+          echo "Static libcheck not available; attempting to install runtime library"
+          if apt-cache show libcheck0 >/dev/null 2>&1; then
+            sudo apt-get install -y libcheck0
+          elif apt-cache show libcheck0t64 >/dev/null 2>&1; then
+            sudo apt-get install -y libcheck0t64
+          else
+            echo "::warning::libcheck runtime package not found (libcheck0, libcheck0t64); tests may fail to launch"
+          fi
+        fi
     
     - name: Build hyprlax
       env:
@@ -58,7 +69,9 @@ jobs:
         make
     
     - name: Run tests
-      run: make test
+      run: |
+        make clean-tests || true
+        make test
     
     - name: Test version output
       run: |
@@ -136,6 +149,7 @@ jobs:
     
     - name: Install dependencies
       run: |
+        set -euo pipefail
         sudo apt-get update
         sudo apt-get install -y \
           libwayland-dev \
@@ -143,9 +157,22 @@ jobs:
           libegl1-mesa-dev \
           libgles2-mesa-dev \
           pkg-config \
+          check \
           make \
           gcc \
           valgrind
+        if pkg-config --static --libs check >/dev/null 2>&1; then
+          echo "Using static libcheck from 'check' package"
+        else
+          echo "Static libcheck not available; attempting to install runtime library"
+          if apt-cache show libcheck0 >/dev/null 2>&1; then
+            sudo apt-get install -y libcheck0
+          elif apt-cache show libcheck0t64 >/dev/null 2>&1; then
+            sudo apt-get install -y libcheck0t64
+          else
+            echo "::warning::libcheck runtime package not found (libcheck0, libcheck0t64); tests may fail to launch"
+          fi
+        fi
     
     - name: Build for memory testing
       env:

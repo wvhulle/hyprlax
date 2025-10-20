@@ -12,6 +12,7 @@
 #include "../include/renderer.h"
 #include "../core/monitor.h"
 #include "../include/log.h"
+#include "../vendor/gifdec.h"
 
 static double rc_get_time(void) {
     struct timespec ts;
@@ -90,7 +91,17 @@ static void hyprlax_render_monitor(hyprlax_context_t *ctx, monitor_instance_t *m
 
     parallax_layer_t *layer = ctx->layers;
     while (layer) {
-        if (layer->hidden || layer->texture_id == 0) { layer = layer->next; continue; }
+        if (layer->hidden) { layer = layer->next; continue; }
+
+        if (layer->is_gif) {
+            if (now_time - layer->last_frame_time > layer->gif_delays[layer->current_frame] / 1000.0) {
+                layer->current_frame = (layer->current_frame + 1) % layer->frame_count;
+                layer->texture_id = layer->gif_textures[layer->current_frame];
+                layer->last_frame_time = now_time;
+            }
+        }
+
+        if (layer->texture_id == 0) { layer = layer->next; continue; }
 
         /* Workspace-driven offsets (pixels) */
         /* Use the current animated value only; offset_x/y are maintained by layer_tick
@@ -254,21 +265,105 @@ int hyprlax_load_layer_textures(hyprlax_context_t *ctx) {
     parallax_layer_t *layer = ctx->layers;
     while (layer) {
         if (layer->texture_id == 0 && layer->image_path) {
-            int img_width, img_height;
-            GLuint texture = load_texture(layer->image_path, &img_width, &img_height);
-            if (texture != 0) {
-                layer->texture_id = texture;
-                layer->width = img_width;
-                layer->height = img_height;
-                layer->texture_width = img_width;
-                layer->texture_height = img_height;
-                loaded++;
-                if (ctx->config.debug) {
-                    LOG_DEBUG("Loaded texture for layer: %s (%dx%d)",
-                              layer->image_path, img_width, img_height);
+            const char *ext = strrchr(layer->image_path, '.');
+            if (ext && strcasecmp(ext, ".gif") == 0) {
+                layer->is_gif = true;
+                gd_GIF *gif = gd_open_gif(layer->image_path);
+                if (!gif) {
+                    LOG_ERROR("Failed to load GIF: %s", layer->image_path);
+                    layer = layer->next;
+                    continue;
                 }
+
+                layer->width = gif->width;
+                layer->height = gif->height;
+                layer->texture_width = gif->width;
+                layer->texture_height = gif->height;
+                layer->gif_data = gif;
+
+                int frame_count = 0;
+                while (gd_get_frame(gif)) {
+                    frame_count++;
+                }
+                gd_rewind(gif);
+
+                if (frame_count == 0) {
+                    LOG_ERROR("GIF file has no frames: %s", layer->image_path);
+                    gd_close_gif(gif);
+                    continue;
+                }
+
+                layer->frame_count = frame_count;
+                layer->gif_textures = calloc(frame_count, sizeof(GLuint));
+                layer->gif_delays = calloc(frame_count, sizeof(int));
+
+                for (int i = 0; i < frame_count; i++) {
+                    gd_get_frame(gif);
+                    uint8_t *buffer = malloc(gif->width * gif->height * 3);
+                    gd_render_frame(gif, buffer);
+
+                    // convert to rgba
+                    uint8_t *rgba_buffer = malloc(gif->width * gif->height * 4);
+
+                    bool has_transparency = gif->gce.transparency;
+                    uint8_t transparent_index = gif->gce.tindex;
+
+                    for (int j = 0; j < gif->width * gif->height; j++) {
+                        uint8_t color_index = gif->frame[j];
+
+                        rgba_buffer[j * 4 + 0] = buffer[j * 3 + 0];
+                        rgba_buffer[j * 4 + 1] = buffer[j * 3 + 1];
+                        rgba_buffer[j * 4 + 2] = buffer[j * 3 + 2];
+
+                        if (has_transparency && color_index == transparent_index) {
+                            rgba_buffer[j * 4 + 3] = 0;
+                        } else {
+                            rgba_buffer[j * 4 + 3] = 255;
+                        }
+                    }
+
+                    GLuint texture;
+                    glGenTextures(1, &texture);
+                    glBindTexture(GL_TEXTURE_2D, texture);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gif->width, gif->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba_buffer);
+
+                    if (rc_is_pow2(gif->width) && rc_is_pow2(gif->height)) {
+                        glGenerateMipmap(GL_TEXTURE_2D);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                    } else {
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    }
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+                    layer->gif_textures[i] = texture;
+                    layer->gif_delays[i] = (gif->gce.delay * 10 >= 10) ? gif->gce.delay * 10 : 10;
+
+                    free(buffer);
+                    free(rgba_buffer);
+                }
+                layer->texture_id = layer->gif_textures[0];
+                layer->current_frame = 0;
+                layer->last_frame_time = rc_get_time();
+                loaded++;
             } else {
-                LOG_ERROR("Failed to load texture for layer: %s", layer->image_path);
+                int img_width, img_height;
+                GLuint texture = load_texture(layer->image_path, &img_width, &img_height);
+                if (texture != 0) {
+                    layer->texture_id = texture;
+                    layer->width = img_width;
+                    layer->height = img_height;
+                    layer->texture_width = img_width;
+                    layer->texture_height = img_height;
+                    loaded++;
+                    if (ctx->config.debug) {
+                        LOG_DEBUG("Loaded texture for layer: %s (%dx%d)",
+                                  layer->image_path, img_width, img_height);
+                    }
+                } else {
+                    LOG_ERROR("Failed to load texture for layer: %s", layer->image_path);
+                }
             }
         }
         layer = layer->next;

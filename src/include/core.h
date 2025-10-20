@@ -79,6 +79,13 @@ typedef struct parallax_layer {
 
     /* OpenGL resources */
     uint32_t texture_id;
+    bool is_gif;
+    int frame_count;
+    uint32_t *gif_textures;
+    int *gif_delays;
+    int current_frame;
+    double last_frame_time;
+    void *gif_data; /* Opaque pointer to gd_GIF */
     int width;       /* Texture width */
     int height;      /* Texture height */
     int texture_width;

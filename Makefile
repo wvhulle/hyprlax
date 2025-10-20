@@ -144,7 +144,8 @@ SRCS = $(MAIN_SRCS) src/ipc.c $(CORE_SRCS) $(RENDERER_SRCS) $(PLATFORM_SRCS) \
        $(COMPOSITOR_SRCS) $(PROTOCOL_SRCS)
 
 # Vendor libraries and optional modules
-SRCS += src/vendor/toml.c src/core/config_toml.c src/core/config_legacy.c
+#SRCS += src/vendor/toml.c src/core/config_toml.c src/core/config_legacy.c
+SRCS += src/vendor/toml.c src/vendor/gifdec.c src/core/config_toml.c src/core/config_legacy.c
 OBJS = $(SRCS:.c=.o)
 TARGET = hyprlax
 
@@ -285,6 +286,9 @@ tests/test_animation_state: tests/test_animation_state.c
 tests/test_config_validation: tests/test_config_validation.c
 	$(CC) $(TEST_CFLAGS) $< $(TEST_LIBS) -o $@
 
+tests/test_gif: tests/test_gif.c src/vendor/gifdec.c
+	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
+
 # Hyprland event parsing tests (link hyprland adapter and core compositor utils)
 tests/test_hyprland_events: tests/test_hyprland_events.c src/compositor/hyprland.c src/compositor/compositor.c src/core/log.c
 	$(CC) $(TEST_CFLAGS) -DUNIT_TEST -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
@@ -311,13 +315,13 @@ tests/test_compositor_caps: tests/test_compositor_caps.c \
 	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) $(PKG_LIBS) -o $@
 
 # New parallax-related tests
-tests/test_toml_config: tests/test_toml_config.c src/core/config_toml.c src/core/config.c src/core/parallax.c src/core/log.c src/core/easing.c src/vendor/toml.c \
+tests/test_toml_config: tests/test_toml_config.c src/core/config_toml.c src/core/config.c src/core/log.c src/core/easing.c src/vendor/toml.c \
     src/core/input/input_manager.c src/core/input/providers.c src/core/input/modes/workspace.c \
     src/core/input/modes/cursor.c src/core/input/modes/window.c src/core/animation.c
 	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
 
 tests/test_runtime_properties: tests/test_runtime_properties.c tests/stubs_gfx.c \
-    src/hyprlax_main.c src/core/parallax.c src/core/log.c src/core/config.c src/core/layer.c \
+    src/hyprlax_main.c src/core/log.c src/core/config.c src/core/layer.c \
     src/core/monitor.c src/core/event_loop.c src/core/input/input_manager.c src/core/input/providers.c \
     src/core/input/modes/workspace.c src/core/input/modes/cursor.c src/core/input/modes/window.c \
     src/core/animation.c src/core/easing.c src/vendor/toml.c src/core/config_toml.c

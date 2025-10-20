@@ -30,8 +30,8 @@ vgcore.*
 *.valgrind.log.core.*
 
 # Test files
-tests/test_hyprlax
-tests/test_ipc
+tests/test_*
+!tests/test_*.c
 *.test
 test_config/
 

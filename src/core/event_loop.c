@@ -189,7 +189,7 @@ int hyprlax_run(hyprlax_context_t *ctx) {
         {
             parallax_layer_t *layer = ctx->layers;
             while (layer) {
-                if (animation_is_active(&layer->x_animation) || animation_is_active(&layer->y_animation)) { animations_active = true; break; }
+                if ((layer->is_gif && layer->frame_count > 1) || animation_is_active(&layer->x_animation) || animation_is_active(&layer->y_animation)) { animations_active = true; break; }
                 layer = layer->next;
             }
             if (!animations_active && ctx->monitors) {

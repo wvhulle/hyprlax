@@ -327,6 +327,18 @@ tests/test_runtime_properties: tests/test_runtime_properties.c tests/stubs_gfx.c
     src/core/animation.c src/core/easing.c src/vendor/toml.c src/core/config_toml.c
 	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) $(PKG_LIBS) -o $@
 
+tests/test_input_manager: tests/test_input_manager.c \
+    src/core/input/input_manager.c src/core/log.c
+	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
+
+tests/test_texture_atlas: tests/test_texture_atlas.c \
+    src/renderer/texture_atlas.c
+	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
+
+tests/test_event_loop: tests/test_event_loop.c \
+    src/core/event_loop.c src/core/log.c
+	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
+
 # Run all tests
 test: $(ALL_TEST_TARGETS)
 	@echo "=== Running Full Test Suite ==="

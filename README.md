@@ -18,7 +18,7 @@ Dynamic parallax wallpaper engine with multi-compositor support for Linux.
 - 🖼️ **Parallax effect** - Wallpaper shifts as you switch workspaces
 - 🌌 **Multi-layer parallax** - Create depth with multiple layers moving at different speeds
 - 🔍 **Depth-of-field blur** - Realistic depth perception with per-layer blur effects
-- 🖥️ **Multi-compositor support** - Works with Hyprland, Sway, River, Wayfire, Niri, and more
+- 🖥️ **Multi-compositor support** - Works with Hyprland, Sway, River, Niri, and more
 - ⚡ **Lightweight** - Native client using appropriate protocols for each platform
 - 🎨 **Customizable** - Per-layer easing functions, delays, and animation parameters
 - 🔄 **Seamless transitions** - Interrupts and chains animations smoothly

@@ -1,90 +1,187 @@
-name: Publish AUR (hyprlax)
+name: Publish AUR
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'         # publish stable when a version tag is pushed
+    branches:
+      - main         # update -git on pushes to main
+  workflow_dispatch:  # manual trigger
     inputs:
       tag:
-        description: 'Release tag to publish (e.g., v2.2.0)'
-        required: true
+        description: 'Tag to publish (e.g., v2.2.0)'
+        required: false
         type: string
 
-jobs:
-  aur:
-    if: ${{ github.event.release.prerelease == false || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    container: archlinux:base-devel
-    steps:
-      - name: Install tools
-        run: |
-          pacman-key --init
-          pacman-key --populate
-          pacman -Syu --noconfirm git openssh wget sed which base-devel wayland wayland-protocols
+concurrency:
+  group: aur-${{ github.ref }}
+  cancel-in-progress: true
 
+jobs:
+  publish-stable:
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.event.release.tag_name }}
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
 
-      - name: Prepare PKGBUILD for release tag
-        id: prep
-        env:
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+      - name: Install arch tooling
         run: |
-          set -euo pipefail
-          if [[ -z "${TAG:-}" ]]; then echo "Missing tag"; exit 1; fi
-          PKGVER="${TAG#v}"
-          echo "pkgver=${PKGVER}" >> "$GITHUB_OUTPUT"
-          WORKDIR=/tmp/aur-hyprlax
-          mkdir -p "$WORKDIR"
-          cp packaging/arch/hyprlax/PKGBUILD "$WORKDIR/PKGBUILD"
-          # Update pkgver in PKGBUILD
-          sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" "$WORKDIR/PKGBUILD"
-          # Fetch source tarball and compute sha256
-          TARBALL_URL="https://github.com/sandwichfarm/hyprlax/archive/refs/tags/${TAG}.tar.gz"
-          wget -O /tmp/src.tar.gz "$TARBALL_URL"
-          SHA256=$(sha256sum /tmp/src.tar.gz | awk '{print $1}')
-          # Ensure source filename has v${pkgver}
-          sed -i "s|^source=.*|source=(\"hyprlax-v${PKGVER}.tar.gz::${TARBALL_URL}\")|" "$WORKDIR/PKGBUILD"
-          sed -i "s/^sha256sums=.*/sha256sums=('${SHA256}')/" "$WORKDIR/PKGBUILD"
-          # Generate .SRCINFO
-          cd "$WORKDIR"
-          makepkg --printsrcinfo > .SRCINFO
-          ls -la
+          set -euxo pipefail
+          pacman-key --init
+          pacman-key --populate
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git openssh curl
 
       - name: Configure SSH for AUR
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
-          set -euo pipefail
-          if [[ -z "${AUR_SSH_PRIVATE_KEY:-}" ]]; then
-            echo "AUR_SSH_PRIVATE_KEY secret is not set" >&2
-            exit 1
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # Add AUR host keys with retry logic
+          for i in 1 2 3; do
+            if ssh-keyscan -t rsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>&1; then
+              break
+            fi
+            echo "ssh-keyscan attempt $i failed, retrying..."
+            sleep 2
+          done
+          # Verify we got the keys
+          if ! grep -q "aur.archlinux.org" ~/.ssh/known_hosts; then
+            echo "Failed to get AUR host keys, using StrictHostKeyChecking=no"
+            echo "Host aur.archlinux.org" >> ~/.ssh/config
+            echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+            echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
           fi
-          install -m 700 -d ~/.ssh
-          echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
 
-      - name: Push to AUR (hyprlax)
+      - name: Prepare PKGBUILD (stable)
         env:
-          PKGDIR: /tmp/aur-hyprlax
-          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
-          set -euo pipefail
-          cd /tmp
-          git clone ssh://aur@aur.archlinux.org/hyprlax.git aur-hyprlax-repo
-          cd aur-hyprlax-repo
-          # Copy updated files
-          cp -f "$PKGDIR/PKGBUILD" "$PKGDIR/.SRCINFO" .
-          if git diff --quiet --no-index . "$PKGDIR"; then
-            echo "No changes to push to AUR"
-            exit 0
+          set -euxo pipefail
+          VERSION="${TAG#v}"
+          TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA256="$(curl -L "$TARBALL_URL" | sha256sum | cut -d' ' -f1)"
+
+          git clone ssh://aur@aur.archlinux.org/hyprlax.git aur-hyprlax
+          cp packaging/arch/hyprlax/PKGBUILD aur-hyprlax/PKGBUILD
+
+          cd aur-hyprlax
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
+          sed -i "s|^sha256sums=.*|sha256sums=('${SHA256}')|" PKGBUILD
+          # Ensure removed optional dependency stays removed
+          sed -i "/wayfire:/d" PKGBUILD
+
+          makepkg --printsrcinfo > .SRCINFO
+          echo "Stable pkgver set to: ${VERSION}"
+          echo "Stable sha256: ${SHA256}"
+
+      - name: Commit and push (stable)
+        env:
+          AUR_COMMIT_NAME: ${{ secrets.AUR_COMMIT_NAME }}
+          AUR_COMMIT_EMAIL: ${{ secrets.AUR_COMMIT_EMAIL }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euxo pipefail
+          cd aur-hyprlax
+          git config user.name "${AUR_COMMIT_NAME:-github-actions[bot]}"
+          git config user.email "${AUR_COMMIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add PKGBUILD .SRCINFO
+            git commit -m "aur: hyprlax ${TAG}"
+            GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o StrictHostKeyChecking=no" git push origin master
+          else
+            echo "No changes to push for stable"
           fi
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add PKGBUILD .SRCINFO
-          git commit -m "release: ${TAG}"
-          git push
+
+  publish-git:
+    if: github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install arch tooling
+        run: |
+          set -euxo pipefail
+          pacman-key --init
+          pacman-key --populate
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git openssh
+
+      - name: Configure SSH for AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euxo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # Add AUR host keys with retry logic
+          for i in 1 2 3; do
+            if ssh-keyscan -t rsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>&1; then
+              break
+            fi
+            echo "ssh-keyscan attempt $i failed, retrying..."
+            sleep 2
+          done
+          # Verify we got the keys
+          if ! grep -q "aur.archlinux.org" ~/.ssh/known_hosts; then
+            echo "Failed to get AUR host keys, using StrictHostKeyChecking=no"
+            echo "Host aur.archlinux.org" >> ~/.ssh/config
+            echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+            echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+          fi
+
+      - name: Prepare PKGBUILD (-git)
+        id: prep_git
+        run: |
+          set -euxo pipefail
+          REV_COUNT="$(git rev-list --count HEAD)"
+          SHORT_HASH="$(git rev-parse --short HEAD)"
+          PKGVER="r${REV_COUNT}.${SHORT_HASH}"
+          echo "pkgver=${PKGVER}" >> "$GITHUB_OUTPUT"
+
+          git clone ssh://aur@aur.archlinux.org/hyprlax-git.git aur-hyprlax-git
+          cp packaging/arch/hyprlax-git/PKGBUILD aur-hyprlax-git/PKGBUILD
+          cd aur-hyprlax-git
+          sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
+          # Ensure removed optional dependency stays removed
+          sed -i "/wayfire:/d" PKGBUILD
+          makepkg --printsrcinfo > .SRCINFO
+          echo "-git pkgver set to: ${PKGVER}"
+
+      - name: Commit and push (-git)
+        env:
+          AUR_COMMIT_NAME: ${{ secrets.AUR_COMMIT_NAME }}
+          AUR_COMMIT_EMAIL: ${{ secrets.AUR_COMMIT_EMAIL }}
+        run: |
+          set -euxo pipefail
+          cd aur-hyprlax-git
+          git config user.name "${AUR_COMMIT_NAME:-github-actions[bot]}"
+          git config user.email "${AUR_COMMIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add PKGBUILD .SRCINFO
+            # Read pkgver back for log message
+            PKGVER_VAL=$(bash -c 'source PKGBUILD; echo $pkgver')
+            git commit -m "aur: hyprlax-git ${PKGVER_VAL}"
+            GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o StrictHostKeyChecking=no" git push origin master
+          else
+            echo "No changes to push for -git"
+          fi
 

@@ -26,6 +26,8 @@ jobs:
       - name: Install arch tooling
         run: |
           set -euxo pipefail
+          pacman-key --init
+          pacman-key --populate
           pacman -Sy --noconfirm archlinux-keyring
           pacman -Syu --noconfirm
           pacman -S --noconfirm base-devel git openssh curl
@@ -93,6 +95,8 @@ jobs:
       - name: Install arch tooling
         run: |
           set -euxo pipefail
+          pacman-key --init
+          pacman-key --populate
           pacman -Sy --noconfirm archlinux-keyring
           pacman -Syu --noconfirm
           pacman -S --noconfirm base-devel git openssh

@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Install tools
         run: |
+          pacman-key --init
+          pacman-key --populate
           pacman -Syu --noconfirm git openssh wget sed which base-devel wayland wayland-protocols
 
       - name: Checkout repository

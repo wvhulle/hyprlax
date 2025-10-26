@@ -7,6 +7,11 @@ on:
     branches:
       - main         # update -git on pushes to main
   workflow_dispatch:  # manual trigger
+    inputs:
+      tag:
+        description: 'Tag to publish (e.g., v2.2.0)'
+        required: false
+        type: string
 
 concurrency:
   group: aur-${{ github.ref }}
@@ -14,13 +19,14 @@ concurrency:
 
 jobs:
   publish-stable:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.tag
     runs-on: ubuntu-latest
     container: archlinux:base
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Install arch tooling
@@ -46,9 +52,10 @@ jobs:
       - name: Prepare PKGBUILD (stable)
         env:
           REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euxo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${TAG#v}"
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
           SHA256="$(curl -L "$TARBALL_URL" | sha256sum | cut -d' ' -f1)"
 
@@ -69,6 +76,7 @@ jobs:
         env:
           AUR_COMMIT_NAME: ${{ secrets.AUR_COMMIT_NAME }}
           AUR_COMMIT_EMAIL: ${{ secrets.AUR_COMMIT_EMAIL }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euxo pipefail
           cd aur-hyprlax
@@ -76,7 +84,7 @@ jobs:
           git config user.email "${AUR_COMMIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
           if [[ -n "$(git status --porcelain)" ]]; then
             git add PKGBUILD .SRCINFO
-            git commit -m "aur: hyprlax ${GITHUB_REF_NAME}"
+            git commit -m "aur: hyprlax ${TAG}"
             GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o StrictHostKeyChecking=no" git push origin master
           else
             echo "No changes to push for stable"

@@ -3,10 +3,16 @@ name: Publish AUR (hyprlax)
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g., v2.2.0)'
+        required: true
+        type: string
 
 jobs:
   aur:
-    if: ${{ github.event.release.prerelease == false }}
+    if: ${{ github.event.release.prerelease == false || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     container: archlinux:base-devel
     steps:
@@ -18,11 +24,13 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
 
       - name: Prepare PKGBUILD for release tag
         id: prep
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: |
           set -euo pipefail
           if [[ -z "${TAG:-}" ]]; then echo "Missing tag"; exit 1; fi
@@ -62,6 +70,7 @@ jobs:
       - name: Push to AUR (hyprlax)
         env:
           PKGDIR: /tmp/aur-hyprlax
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
         run: |
           set -euo pipefail
           cd /tmp
@@ -76,6 +85,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add PKGBUILD .SRCINFO
-          git commit -m "release: ${GITHUB_REF#refs/tags/}"
+          git commit -m "release: ${TAG}"
           git push
 

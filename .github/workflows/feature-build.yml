@@ -48,7 +48,7 @@ jobs:
               pr = context.payload.pull_request;
               // Only run for feature branches that are ready for review
               shouldRun = !pr.draft && 
-                         (pr.head.ref.startsWith('feat/') || pr.head.ref.startsWith('feature/'));
+                         (pr.head.ref.startsWith('feat/') || pr.head.ref.startsWith('feature/') || pr.head.ref.startsWith('bugfix/'));
             }
             
             if (!shouldRun) {

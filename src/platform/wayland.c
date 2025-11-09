@@ -1138,11 +1138,23 @@ static const char* wayland_get_backend_name(void) {
 }
 
 /* Commit a monitor's Wayland surface */
+static int wl_env_truthy(const char *name, int default_val) {
+    const char *v = getenv(name);
+    if (!v) return default_val;
+    if (*v == '\0') return default_val;
+    if (strcasecmp(v, "0") == 0 || strcasecmp(v, "false") == 0 || strcasecmp(v, "no") == 0) return 0;
+    return 1;
+}
+
 void wayland_commit_monitor_surface(monitor_instance_t *monitor) {
     if (monitor && monitor->wl_surface) {
+        /* Default: enable frame-callback pacing unless explicitly disabled. */
+        int no_fc = wl_env_truthy("HYPRLAX_NO_FRAME_CALLBACK", 0);
+        int fc_toggle = wl_env_truthy("HYPRLAX_FRAME_CALLBACK", 1); /* legacy opt-in now defaults to on */
+        int use_fc = (!no_fc) && fc_toggle;
+
         /* Request a frame callback to pace the next frame if not already pending */
-        const char *use_fc = getenv("HYPRLAX_FRAME_CALLBACK");
-        if (use_fc && *use_fc && !monitor->frame_pending) {
+        if (use_fc && !monitor->frame_pending) {
             struct wl_callback *cb = wl_surface_frame(monitor->wl_surface);
             if (cb) {
                 monitor->frame_callback = cb;

@@ -119,6 +119,14 @@ static double ev_get_time(void) {
     return ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
+static int ev_env_truthy(const char *name, int default_val) {
+    const char *v = getenv(name);
+    if (!v) return default_val;
+    if (*v == '\0') return default_val;
+    if (strcasecmp(v, "0") == 0 || strcasecmp(v, "false") == 0 || strcasecmp(v, "no") == 0) return 0;
+    return 1;
+}
+
 /* Main run loop */
 int hyprlax_run(hyprlax_context_t *ctx) {
     if (!ctx) return HYPRLAX_ERROR_INVALID_ARGS;
@@ -145,8 +153,9 @@ int hyprlax_run(hyprlax_context_t *ctx) {
         int current_fps = ctx->config.target_fps;
         if (current_fps <= 0) current_fps = HYPRLAX_DEFAULT_FPS;
         if (current_fps != prev_target_fps) {
-            const char *fc_env = getenv("HYPRLAX_FRAME_CALLBACK");
-            bool use_frame_callback = (fc_env && *fc_env);
+            int no_fc = ev_env_truthy("HYPRLAX_NO_FRAME_CALLBACK", 0);
+            int fc_toggle = ev_env_truthy("HYPRLAX_FRAME_CALLBACK", 1);
+            bool use_frame_callback = (!no_fc) && fc_toggle;
             if (!use_frame_callback) {
                 hyprlax_arm_frame_timer(ctx, current_fps);
             }
@@ -198,9 +207,10 @@ int hyprlax_run(hyprlax_context_t *ctx) {
             }
         }
 
-        const char *use_fc = getenv("HYPRLAX_FRAME_CALLBACK");
+        int no_fc2 = ev_env_truthy("HYPRLAX_NO_FRAME_CALLBACK", 0);
+        int fc_toggle2 = ev_env_truthy("HYPRLAX_FRAME_CALLBACK", 1);
         if (animations_active) {
-            if (use_fc && *use_fc && ctx->monitors) {
+            if ((!no_fc2) && fc_toggle2 && ctx->monitors) {
                 bool can_render = false;
                 monitor_instance_t *m = ctx->monitors->head;
                 while (m) { if (!m->frame_pending) { can_render = true; break; } m = m->next; }
@@ -213,8 +223,9 @@ int hyprlax_run(hyprlax_context_t *ctx) {
         if (needs_render) {
             double time_since_render = current_time - last_render_time;
             if (time_since_render < frame_time) {
-                const char *fc_env = getenv("HYPRLAX_FRAME_CALLBACK");
-                bool use_frame_callback = (fc_env && *fc_env);
+                int no_fc3 = ev_env_truthy("HYPRLAX_NO_FRAME_CALLBACK", 0);
+                int fc_toggle3 = ev_env_truthy("HYPRLAX_FRAME_CALLBACK", 1);
+                bool use_frame_callback = (!no_fc3) && fc_toggle3;
                 if (!use_frame_callback) {
                     int sleep_ms = (int)((frame_time - time_since_render) * 1000.0);
                     if (sleep_ms > 0) {
@@ -246,8 +257,9 @@ int hyprlax_run(hyprlax_context_t *ctx) {
                 }
             }
         } else {
-            const char *fc_env = getenv("HYPRLAX_FRAME_CALLBACK");
-            bool use_frame_callback = (fc_env && *fc_env);
+            int no_fc4 = ev_env_truthy("HYPRLAX_NO_FRAME_CALLBACK", 0);
+            int fc_toggle4 = ev_env_truthy("HYPRLAX_FRAME_CALLBACK", 1);
+            bool use_frame_callback = (!no_fc4) && fc_toggle4;
             if (!use_frame_callback) {
                 if (animations_active) {
                     if (!ctx->frame_timer_armed) hyprlax_arm_frame_timer(ctx, ctx->config.target_fps);

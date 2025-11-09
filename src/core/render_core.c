@@ -51,6 +51,15 @@ GLuint load_texture(const char *path, int *width, int *height) {
     return texture;
 }
 
+static int rc_env_truthy(const char *name, int default_val) {
+    const char *v = getenv(name);
+    if (!v) return default_val;
+    if (*v == '\0') return default_val;
+    /* Treat "0", "false", "False", "no" as false */
+    if (strcasecmp(v, "0") == 0 || strcasecmp(v, "false") == 0 || strcasecmp(v, "no") == 0) return 0;
+    return 1;
+}
+
 static void hyprlax_render_monitor(hyprlax_context_t *ctx, monitor_instance_t *monitor, double now_time) {
     if (!ctx || !ctx->renderer || !monitor) {
         LOG_TRACE("Skipping render: ctx=%p, renderer=%p, monitor=%p", ctx, ctx ? ctx->renderer : NULL, monitor);
@@ -58,6 +67,16 @@ static void hyprlax_render_monitor(hyprlax_context_t *ctx, monitor_instance_t *m
     }
     if (!monitor->egl_surface) {
         LOG_WARN("Monitor %s has no EGL surface", monitor->name);
+        return;
+    }
+
+    /* If frame-callback pacing is enabled (default), avoid presenting while a frame is pending. */
+    int frame_cb_enabled = rc_env_truthy("HYPRLAX_NO_FRAME_CALLBACK", 0) ? 0 : 1;
+    int skip_pending_present = rc_env_truthy("HYPRLAX_SKIP_PENDING_PRESENT", 1);
+    if (frame_cb_enabled && skip_pending_present && monitor->frame_pending) {
+        if (ctx->config.debug) {
+            LOG_DEBUG("Monitor %s: skipping draw/present (frame pending)", monitor->name);
+        }
         return;
     }
     if (gles2_make_current(monitor->egl_surface) != HYPRLAX_SUCCESS) {

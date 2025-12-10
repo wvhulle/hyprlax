@@ -47,21 +47,22 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
-          # Add AUR host keys with retry logic
-          for i in 1 2 3; do
-            if ssh-keyscan -t rsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>&1; then
-              break
-            fi
-            echo "ssh-keyscan attempt $i failed, retrying..."
-            sleep 2
-          done
-          # Verify we got the keys
-          if ! grep -q "aur.archlinux.org" ~/.ssh/known_hosts; then
-            echo "Failed to get AUR host keys, using StrictHostKeyChecking=no"
-            echo "Host aur.archlinux.org" >> ~/.ssh/config
-            echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-            echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-          fi
+
+          # Debug: Verify key was written correctly
+          echo "Key file size: $(wc -c < ~/.ssh/aur) bytes"
+          echo "Key file lines: $(wc -l < ~/.ssh/aur) lines"
+          head -1 ~/.ssh/aur
+          tail -1 ~/.ssh/aur
+
+          # Verify key is valid and extract public key
+          ssh-keygen -y -f ~/.ssh/aur > ~/.ssh/aur.pub || { echo "ERROR: Invalid private key format"; exit 1; }
+          echo "Public key fingerprint:"
+          ssh-keygen -lf ~/.ssh/aur.pub
+          echo "Public key (verify this matches AUR account):"
+          cat ~/.ssh/aur.pub
+
+          # Add AUR host keys
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Prepare PKGBUILD (stable)
         env:
@@ -132,21 +133,22 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
-          # Add AUR host keys with retry logic
-          for i in 1 2 3; do
-            if ssh-keyscan -t rsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>&1; then
-              break
-            fi
-            echo "ssh-keyscan attempt $i failed, retrying..."
-            sleep 2
-          done
-          # Verify we got the keys
-          if ! grep -q "aur.archlinux.org" ~/.ssh/known_hosts; then
-            echo "Failed to get AUR host keys, using StrictHostKeyChecking=no"
-            echo "Host aur.archlinux.org" >> ~/.ssh/config
-            echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-            echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-          fi
+
+          # Debug: Verify key was written correctly
+          echo "Key file size: $(wc -c < ~/.ssh/aur) bytes"
+          echo "Key file lines: $(wc -l < ~/.ssh/aur) lines"
+          head -1 ~/.ssh/aur
+          tail -1 ~/.ssh/aur
+
+          # Verify key is valid and extract public key
+          ssh-keygen -y -f ~/.ssh/aur > ~/.ssh/aur.pub || { echo "ERROR: Invalid private key format"; exit 1; }
+          echo "Public key fingerprint:"
+          ssh-keygen -lf ~/.ssh/aur.pub
+          echo "Public key (verify this matches AUR account):"
+          cat ~/.ssh/aur.pub
+
+          # Add AUR host keys
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Prepare PKGBUILD (-git)
         id: prep_git

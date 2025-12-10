@@ -73,7 +73,7 @@ jobs:
           TARBALL_URL="https://github.com/${REPO}/archive/refs/tags/v${VERSION}.tar.gz"
           SHA256="$(curl -L "$TARBALL_URL" | sha256sum | cut -d' ' -f1)"
 
-          git clone ssh://aur@aur.archlinux.org/hyprlax.git aur-hyprlax
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o StrictHostKeyChecking=accept-new" git clone ssh://aur@aur.archlinux.org/hyprlax.git aur-hyprlax
           cp packaging/arch/hyprlax/PKGBUILD aur-hyprlax/PKGBUILD
 
           cd aur-hyprlax
@@ -157,7 +157,7 @@ jobs:
           PKGVER="r${REV_COUNT}.${SHORT_HASH}"
           echo "pkgver=${PKGVER}" >> "$GITHUB_OUTPUT"
 
-          git clone ssh://aur@aur.archlinux.org/hyprlax-git.git aur-hyprlax-git
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o StrictHostKeyChecking=accept-new" git clone ssh://aur@aur.archlinux.org/hyprlax-git.git aur-hyprlax-git
           cp packaging/arch/hyprlax-git/PKGBUILD aur-hyprlax-git/PKGBUILD
           cd aur-hyprlax-git
           sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD

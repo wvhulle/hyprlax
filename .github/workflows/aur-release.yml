@@ -23,12 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-          fetch-depth: 0
-
       - name: Install arch tooling
         run: |
           set -euxo pipefail
@@ -37,6 +31,15 @@ jobs:
           pacman -Sy --noconfirm archlinux-keyring
           pacman -Syu --noconfirm
           pacman -S --noconfirm base-devel git openssh curl
+          if ! id -u builder >/dev/null 2>&1; then
+            useradd -m builder
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
 
       - name: Configure SSH for AUR
         env:
@@ -83,7 +86,9 @@ jobs:
           # Ensure removed optional dependency stays removed
           sed -i "/wayfire:/d" PKGBUILD
 
-          makepkg --printsrcinfo > .SRCINFO
+          AUR_DIR="$(pwd)"
+          chown -R builder:builder "${AUR_DIR}"
+          su - builder -c "cd '${AUR_DIR}' && makepkg --printsrcinfo > .SRCINFO"
           echo "Stable pkgver set to: ${VERSION}"
           echo "Stable sha256: ${SHA256}"
 
@@ -110,11 +115,6 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:base
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Install arch tooling
         run: |
           set -euxo pipefail
@@ -123,6 +123,14 @@ jobs:
           pacman -Sy --noconfirm archlinux-keyring
           pacman -Syu --noconfirm
           pacman -S --noconfirm base-devel git openssh
+          if ! id -u builder >/dev/null 2>&1; then
+            useradd -m builder
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure SSH for AUR
         env:
@@ -154,8 +162,8 @@ jobs:
         id: prep_git
         run: |
           set -euxo pipefail
-          REV_COUNT="$(git rev-list --count HEAD)"
-          SHORT_HASH="$(git rev-parse --short HEAD)"
+          REV_COUNT="$(git -C "${GITHUB_WORKSPACE}" rev-list --count HEAD)"
+          SHORT_HASH="$(git -C "${GITHUB_WORKSPACE}" rev-parse --short HEAD)"
           PKGVER="r${REV_COUNT}.${SHORT_HASH}"
           echo "pkgver=${PKGVER}" >> "$GITHUB_OUTPUT"
 
@@ -165,7 +173,9 @@ jobs:
           sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" PKGBUILD
           # Ensure removed optional dependency stays removed
           sed -i "/wayfire:/d" PKGBUILD
-          makepkg --printsrcinfo > .SRCINFO
+          AUR_DIR="$(pwd)"
+          chown -R builder:builder "${AUR_DIR}"
+          su - builder -c "cd '${AUR_DIR}' && makepkg --printsrcinfo > .SRCINFO"
           echo "-git pkgver set to: ${PKGVER}"
 
       - name: Commit and push (-git)
@@ -186,4 +196,3 @@ jobs:
           else
             echo "No changes to push for -git"
           fi
-

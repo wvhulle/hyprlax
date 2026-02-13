@@ -222,8 +222,3 @@ Potential improvements for future releases:
 - GPU resource tracking improvements
 - Export metrics to Prometheus/StatsD
 
-## Related Documentation
-
-- [IPC System](ipc.md) - Runtime control interface
-- [Event Loop](event_loop.md) - Main event processing
-- [Memory Management](memory.md) - Resource lifecycle

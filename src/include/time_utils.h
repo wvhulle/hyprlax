@@ -8,6 +8,7 @@
 #ifndef HYPRLAX_TIME_UTILS_H
 #define HYPRLAX_TIME_UTILS_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
 

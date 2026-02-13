@@ -128,8 +128,8 @@ jobs:
     - name: Generate release notes
       id: notes
       run: |
-        # Get all tags sorted by version
-        git fetch --tags
+        # Get all tags sorted by version (--force handles re-created tags)
+        git fetch --tags --force
         
         # Get the previous release tag (excluding pre-releases and current tag)
         PREV_TAG=$(git tag -l 'v*' | grep -v '-' | grep -v "^${GITHUB_REF_NAME}$" | sort -V | tail -1)

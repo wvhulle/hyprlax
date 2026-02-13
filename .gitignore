@@ -45,3 +45,11 @@ dist/
 
 #mkdocs
 _site_mkdocs/
+
+#resource-tracking
+resource_tracking.csv
+
+#ai
+.claude
+.claude-flow
+.hive-mind

@@ -7,6 +7,7 @@
 #include "include/hyprlax.h"
 #include "include/core.h"
 #include "include/log.h"
+#include "include/resource_monitor.h"
 #include "compositor/workspace_models.h"
 #include "include/config_toml.h"
 #include <stdio.h>
@@ -24,6 +25,11 @@
 #include <stdarg.h>
 #include <math.h>
 #include "include/defaults.h"
+#include <poll.h>
+
+/* IPC timeout configuration */
+#define IPC_READ_TIMEOUT_SEC 10
+#define IPC_WRITE_TIMEOUT_SEC 5
 
 /* stb_image prototypes (implementation is compiled in hyprlax_main.c) */
 extern int stbi_info(const char *filename, int *x, int *y, int *comp);
@@ -42,6 +48,24 @@ static void ipc_errorf(char *out, size_t out_sz, int code, const char *fmt, ...)
 static int token_check_len(const char *tok, size_t maxlen, const char *name,
                            char *response, size_t response_sz);
 static int parse_int_range(const char *s, int minv, int maxv, int *out);
+
+/* Helper function for safe send with timeout error handling */
+static bool ipc_send_safe(int fd, const char* data, size_t len) {
+    ssize_t sent = send(fd, data, len, 0);
+    if (sent < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            LOG_WARN("IPC client write timeout (slow client)");
+            return false;
+        } else if (errno == EPIPE) {
+            LOG_DEBUG("IPC client disconnected (EPIPE)");
+            return false;
+        } else if (errno != EINTR) {
+            LOG_ERROR("IPC write error: %s", strerror(errno));
+            return false;
+        }
+    }
+    return (sent >= 0);
+}
 
 static int str_to_bool(const char *v) {
     if (!v) return 0;
@@ -353,6 +377,7 @@ static ipc_command_t parse_command(const char* cmd) {
     if (strcmp(cmd, "get") == 0) return IPC_CMD_GET_PROPERTY;
     if (strcmp(cmd, "diag") == 0) return IPC_CMD_DIAG;
     if (strcmp(cmd, "computed") == 0 || strcmp(cmd, "calc") == 0 || strcmp(cmd, "calculate") == 0) return IPC_CMD_COMPUTED;
+    if (strcmp(cmd, "resource_status") == 0 || strcmp(cmd, "resources") == 0) return IPC_CMD_RESOURCE_STATUS;
     return IPC_CMD_UNKNOWN;
 }
 
@@ -457,10 +482,43 @@ void ipc_cleanup(ipc_context_t* ctx) {
 bool ipc_process_commands(ipc_context_t* ctx) {
     if (!ctx || !ctx->active) return false;
 
-    // Accept new connections
+    // Accept new connections with timeout
     struct sockaddr_un client_addr;
     socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(ctx->socket_fd, (struct sockaddr*)&client_addr, &client_len);
+    int client_fd = -1;
+
+    /* Non-blocking poll: the main event loop already handles IPC socket
+     * readiness via epoll, so we only need to check if data is available
+     * right now. A blocking timeout here would stall the entire render loop. */
+    struct pollfd pfd;
+    pfd.fd = ctx->socket_fd;
+    pfd.events = POLLIN;
+
+    int ret = poll(&pfd, 1, 0);
+    if (ret > 0 && (pfd.revents & POLLIN)) {
+        client_fd = accept(ctx->socket_fd, (struct sockaddr*)&client_addr, &client_len);
+        if (client_fd >= 0) {
+            /* Set read/write timeouts on client socket */
+            struct timeval tv;
+            tv.tv_sec = IPC_READ_TIMEOUT_SEC;
+            tv.tv_usec = 0;
+            setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+            tv.tv_sec = IPC_WRITE_TIMEOUT_SEC;
+            tv.tv_usec = 0;
+            setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+        }
+    } else if (ret == 0) {
+        /* Timeout - not an error, just no client */
+        LOG_TRACE("IPC accept timeout (no client)");
+        return false;
+    } else {
+        /* Error */
+        if (errno != EINTR) {
+            LOG_ERROR("IPC poll error: %s", strerror(errno));
+        }
+        return false;
+    }
 
     if (client_fd < 0) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) { LOG_WARN("Failed to accept IPC connection: %s", strerror(errno)); }
@@ -470,7 +528,17 @@ bool ipc_process_commands(ipc_context_t* ctx) {
     // Read command
     char buffer[IPC_MAX_MESSAGE_SIZE];
     ssize_t bytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-    if (bytes <= 0) {
+    if (bytes < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            LOG_WARN("IPC client read timeout (slow client), closing connection");
+        } else if (errno != EINTR) {
+            LOG_ERROR("IPC read error: %s", strerror(errno));
+        }
+        close(client_fd);
+        return false;
+    }
+    if (bytes == 0) {
+        /* Client disconnected */
         close(client_fd);
         return false;
     }
@@ -481,7 +549,7 @@ bool ipc_process_commands(ipc_context_t* ctx) {
     char* cmd = strtok(buffer, " \n");
     if (!cmd) {
         const char* error = ipc_error_codes_enabled()?"Error(1000): No command specified\n":"Error: No command specified\n";
-        send(client_fd, error, strlen(error), 0);
+        ipc_send_safe(client_fd, error, strlen(error));
         close(client_fd);
         return false;
     }
@@ -558,13 +626,17 @@ bool ipc_process_commands(ipc_context_t* ctx) {
                 break;
             }
             /* Capture previous max id */
+            pthread_mutex_lock(&app->layer_mutex);
             uint32_t prev_max_id = 0;
             for (parallax_layer_t *it = app->layers; it; it = it->next) {
                 if (it->id > prev_max_id) prev_max_id = it->id;
             }
+            pthread_mutex_unlock(&app->layer_mutex);
+
             int rc_add = hyprlax_add_layer(app, path, 1.0f, 1.0f, 0.0f);
             if (rc_add == 0) {
                 /* Find the new layer and apply initial params */
+                pthread_mutex_lock(&app->layer_mutex);
                 uint32_t new_id = 0; parallax_layer_t *new_layer = NULL;
                 for (parallax_layer_t *it = app->layers; it; it = it->next) {
                     if (it->id > prev_max_id) { new_id = it->id; new_layer = it; }
@@ -582,6 +654,7 @@ bool ipc_process_commands(ipc_context_t* ctx) {
                 }
                 /* Maintain draw order by z */
                 app->layers = layer_list_sort_by_z(app->layers);
+                pthread_mutex_unlock(&app->layer_mutex);
                 if (response[0] && strncmp(response, "Error", 5) == 0) { success = false; }
                 else { snprintf(response, sizeof(response), new_layer ? "Layer added with ID: %u\n" : "Layer added\n", new_id); success = true; }
             } else {
@@ -603,7 +676,10 @@ bool ipc_process_commands(ipc_context_t* ctx) {
                 break;
             }
             hyprlax_context_t *app = (hyprlax_context_t*)ctx->app_context;
-            if (app && layer_list_find(app->layers, id)) {
+            pthread_mutex_lock(&app->layer_mutex);
+            bool found = (app && layer_list_find(app->layers, id));
+            pthread_mutex_unlock(&app->layer_mutex);
+            if (found) {
                 hyprlax_remove_layer(app, id);
                 snprintf(response, sizeof(response), "Layer %u removed\n", id);
                 success = true;
@@ -632,15 +708,20 @@ bool ipc_process_commands(ipc_context_t* ctx) {
                 break;
             }
             hyprlax_context_t *app = (hyprlax_context_t*)ctx->app_context;
+            pthread_mutex_lock(&app->layer_mutex);
             parallax_layer_t *layer = app ? layer_list_find(app->layers, id) : NULL;
             if (!layer) {
+                pthread_mutex_unlock(&app->layer_mutex);
                 ipc_errorf(response, sizeof(response), 1102, "Failed to modify layer %u\n", id);
                 break;
             }
             if (apply_layer_property(app, layer, property, value, response, sizeof(response))) {
                 /* Re-sort list by z if z was modified */
                 if (strcmp(property, "z") == 0) app->layers = layer_list_sort_by_z(app->layers);
+                pthread_mutex_unlock(&app->layer_mutex);
                 snprintf(response, sizeof(response), "Layer %u modified\n", id); success = true;
+            } else {
+                pthread_mutex_unlock(&app->layer_mutex);
             }
             break;
         }
@@ -675,6 +756,7 @@ bool ipc_process_commands(ipc_context_t* ctx) {
             }
 
             size_t off = 0; response[0] = '\0';
+            pthread_mutex_lock(&app->layer_mutex);
             if (json) {
                 off += snprintf(response + off, sizeof(response) - off, "[");
                 bool first = true;
@@ -766,6 +848,7 @@ bool ipc_process_commands(ipc_context_t* ctx) {
                 }
                 success = true;
             }
+            pthread_mutex_unlock(&app->layer_mutex);
             break;
         }
 
@@ -851,7 +934,15 @@ bool ipc_process_commands(ipc_context_t* ctx) {
             {
                 hyprlax_context_t *app = (hyprlax_context_t*)ctx->app_context;
                 if (!app) { snprintf(response, sizeof(response), "Error: Runtime context unavailable\n"); break; }
-                while (app->layers) { uint32_t id = app->layers->id; hyprlax_remove_layer(app, id); }
+                /* hyprlax_remove_layer protects the removal, but we need to repeatedly check the head */
+                while (true) {
+                    pthread_mutex_lock(&app->layer_mutex);
+                    parallax_layer_t *head = app->layers;
+                    uint32_t id = head ? head->id : 0;
+                    pthread_mutex_unlock(&app->layer_mutex);
+                    if (!head) break;
+                    hyprlax_remove_layer(app, id);
+                }
                 snprintf(response, sizeof(response), "All layers cleared\n");
                 success = true;
                 break;
@@ -1141,13 +1232,60 @@ bool ipc_process_commands(ipc_context_t* ctx) {
             (void)n; success = true; break;
         }
 
+        case IPC_CMD_RESOURCE_STATUS: {
+            hyprlax_context_t *app = (hyprlax_context_t*)ctx->app_context;
+            if (!app || !app->resource_monitor) {
+                snprintf(response, sizeof(response), "Error: Resource monitor not available\n");
+                break;
+            }
+
+            resource_monitor_t *mon = app->resource_monitor;
+
+            /* Calculate growth values */
+            int fd_growth = mon->fd_count_current - mon->fd_count_start;
+            int fd_max_growth = mon->fd_count_max - mon->fd_count_start;
+            ssize_t rss_growth = (ssize_t)(mon->memory_rss_current_kb - mon->memory_rss_start_kb);
+            size_t rss_max_growth = mon->memory_rss_max_kb - mon->memory_rss_start_kb;
+
+            snprintf(response, sizeof(response),
+                     "=== Resource Monitor Status ===\n"
+                     "Checks performed: %lu\n"
+                     "Check interval: %.1f seconds\n"
+                     "\n"
+                     "File Descriptors:\n"
+                     "  Baseline: %d\n"
+                     "  Current:  %d (+%d)\n"
+                     "  Maximum:  %d (+%d)\n"
+                     "\n"
+                     "Memory (RSS):\n"
+                     "  Baseline: %zu KB\n"
+                     "  Current:  %zu KB (+%zd KB)\n"
+                     "  Maximum:  %zu KB (+%zu KB)\n"
+                     "\n",
+                     (unsigned long)mon->check_count,
+                     mon->check_interval,
+                     mon->fd_count_start,
+                     mon->fd_count_current,
+                     fd_growth,
+                     mon->fd_count_max,
+                     fd_max_growth,
+                     mon->memory_rss_start_kb,
+                     mon->memory_rss_current_kb,
+                     rss_growth,
+                     mon->memory_rss_max_kb,
+                     rss_max_growth);
+
+            success = true;
+            break;
+        }
+
         default:
             ipc_errorf(response, sizeof(response), 1002, "Unknown command '%s'\n", cmd);
             break;
     }
 
     // Send response
-    send(client_fd, response, strlen(response), 0);
+    ipc_send_safe(client_fd, response, strlen(response));
     close(client_fd);
 
     return success;

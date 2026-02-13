@@ -87,8 +87,12 @@ ifeq ($(ENABLE_WAYLAND),1)
 XDG_SHELL_PROTOCOL = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 LAYER_SHELL_PROTOCOL = protocols/wlr-layer-shell-unstable-v1.xml
 RIVER_STATUS_PROTOCOL = protocols/river-status-unstable-v1.xml
-PROTOCOL_SRCS = protocols/xdg-shell-protocol.c protocols/wlr-layer-shell-protocol.c
-PROTOCOL_HDRS = protocols/xdg-shell-client-protocol.h protocols/wlr-layer-shell-client-protocol.h
+FRACTIONAL_SCALE_PROTOCOL = $(WAYLAND_PROTOCOLS_DIR)/staging/fractional-scale/fractional-scale-v1.xml
+VIEWPORTER_PROTOCOL = $(WAYLAND_PROTOCOLS_DIR)/stable/viewporter/viewporter.xml
+PROTOCOL_SRCS = protocols/xdg-shell-protocol.c protocols/wlr-layer-shell-protocol.c \
+                protocols/fractional-scale-v1-protocol.c protocols/viewporter-protocol.c
+PROTOCOL_HDRS = protocols/xdg-shell-client-protocol.h protocols/wlr-layer-shell-client-protocol.h \
+                protocols/fractional-scale-v1-client-protocol.h protocols/viewporter-client-protocol.h
 # River status protocol is optional, only include if River is enabled
 ifeq ($(ENABLE_RIVER),1)
 PROTOCOL_SRCS += protocols/river-status-protocol.c
@@ -100,7 +104,7 @@ PROTOCOL_HDRS =
 endif
 
 # Core module sources (always included)
-CORE_SRCS = src/core/easing.c src/core/animation.c src/core/layer.c src/core/config.c src/core/monitor.c src/core/log.c src/core/cursor.c src/core/render_core.c src/core/event_loop.c \
+CORE_SRCS = src/core/easing.c src/core/animation.c src/core/layer.c src/core/config.c src/core/monitor.c src/core/log.c src/core/cursor.c src/core/render_core.c src/core/event_loop.c src/core/resource_monitor.c src/core/time_utils.c \
             src/core/input/input_manager.c src/core/input/providers.c src/core/input/modes/workspace.c src/core/input/modes/cursor.c src/core/input/modes/window.c
 
 # Renderer module sources (conditional)
@@ -186,6 +190,22 @@ protocols/river-status-protocol.c: $(RIVER_STATUS_PROTOCOL)
 	$(WAYLAND_SCANNER) private-code < $< > $@
 
 protocols/river-status-client-protocol.h: $(RIVER_STATUS_PROTOCOL)
+	@mkdir -p protocols
+	$(WAYLAND_SCANNER) client-header < $< > $@
+
+protocols/fractional-scale-v1-protocol.c: $(FRACTIONAL_SCALE_PROTOCOL)
+	@mkdir -p protocols
+	$(WAYLAND_SCANNER) private-code < $< > $@
+
+protocols/fractional-scale-v1-client-protocol.h: $(FRACTIONAL_SCALE_PROTOCOL)
+	@mkdir -p protocols
+	$(WAYLAND_SCANNER) client-header < $< > $@
+
+protocols/viewporter-protocol.c: $(VIEWPORTER_PROTOCOL)
+	@mkdir -p protocols
+	$(WAYLAND_SCANNER) private-code < $< > $@
+
+protocols/viewporter-client-protocol.h: $(VIEWPORTER_PROTOCOL)
 	@mkdir -p protocols
 	$(WAYLAND_SCANNER) client-header < $< > $@
 
@@ -322,7 +342,8 @@ tests/test_toml_config: tests/test_toml_config.c src/core/config_toml.c src/core
 
 tests/test_runtime_properties: tests/test_runtime_properties.c tests/stubs_gfx.c \
     src/hyprlax_main.c src/core/log.c src/core/config.c src/core/layer.c \
-    src/core/monitor.c src/core/event_loop.c src/core/input/input_manager.c src/core/input/providers.c \
+    src/core/monitor.c src/core/event_loop.c src/core/resource_monitor.c src/core/time_utils.c \
+    src/core/input/input_manager.c src/core/input/providers.c \
     src/core/input/modes/workspace.c src/core/input/modes/cursor.c src/core/input/modes/window.c \
     src/core/animation.c src/core/easing.c src/vendor/toml.c src/core/config_toml.c
 	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) $(PKG_LIBS) -o $@
@@ -337,6 +358,10 @@ tests/test_texture_atlas: tests/test_texture_atlas.c \
 
 tests/test_event_loop: tests/test_event_loop.c \
     src/core/event_loop.c src/core/log.c
+	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
+
+tests/test_resource_monitor: tests/test_resource_monitor.c \
+    src/core/resource_monitor.c src/core/log.c
 	$(CC) $(TEST_CFLAGS) -Isrc -Isrc/include $^ $(TEST_LIBS) -o $@
 
 # Run all tests

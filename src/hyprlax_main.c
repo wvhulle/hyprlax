@@ -25,8 +25,11 @@
 #include "include/config_toml.h"
 #include "include/wayland_api.h"
 #include "include/defaults.h"
+#include "include/resource_monitor.h"
+#include "include/time_utils.h"
 #include "core/monitor.h"
 #include "ipc.h"
+#include "vendor/gifdec.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -261,6 +264,13 @@ hyprlax_context_t* hyprlax_create(void) {
     ctx->workspace_offset_x = 0.0f;
     ctx->workspace_offset_y = 0.0f;
 
+    /* Initialize layer mutex for thread-safe access */
+    if (pthread_mutex_init(&ctx->layer_mutex, NULL) != 0) {
+        LOG_ERROR("Failed to initialize layer mutex");
+        free(ctx);
+        return NULL;
+    }
+
     /* Cursor state defaults */
     ctx->cursor_event_fd = -1;
     ctx->cursor_norm_x = 0.0f;
@@ -294,6 +304,17 @@ hyprlax_context_t* hyprlax_create(void) {
     ctx->frame_timer_armed = false;
     ctx->debounce_pending = false;
 
+    /* Initialize resource monitor (check every 5 minutes) */
+    ctx->resource_monitor = resource_monitor_create(300.0);
+    if (!ctx->resource_monitor) {
+        LOG_WARN("Failed to create resource monitor");
+    }
+
+    /* Initialize lock state (Phase 2: hyprlock integration) */
+    ctx->screen_locked = false;
+    ctx->lock_time = 0.0;
+    ctx->lock_cycle_count = 0;
+
     return ctx;
 }
 
@@ -302,6 +323,15 @@ void hyprlax_destroy(hyprlax_context_t *ctx) {
     if (!ctx) return;
 
     hyprlax_shutdown(ctx);
+
+    /* Destroy resource monitor */
+    if (ctx->resource_monitor) {
+        resource_monitor_destroy(ctx->resource_monitor);
+        ctx->resource_monitor = NULL;
+    }
+
+    /* Destroy layer mutex */
+    pthread_mutex_destroy(&ctx->layer_mutex);
 
     /* Clean up configuration */
     config_cleanup(&ctx->config);
@@ -1161,9 +1191,16 @@ int hyprlax_init(hyprlax_context_t *ctx, int argc, char **argv) {
             if (monitor->wl_egl_window && !monitor->egl_surface) {
                 monitor->egl_surface = gles2_create_monitor_surface(monitor->wl_egl_window);
                 if (monitor->egl_surface) {
-                    LOG_DEBUG("Created EGL surface for monitor %s", monitor->name);
+                    LOG_INFO("Created EGL surface for monitor %s", monitor->name);
+                    monitor->failed = false;
                 } else {
                     LOG_ERROR("Failed to create EGL surface for monitor %s", monitor->name);
+                    LOG_ERROR("  Monitor state:");
+                    LOG_ERROR("    - wl_surface: %p", (void*)monitor->wl_surface);
+                    LOG_ERROR("    - layer_surface: %p", (void*)monitor->layer_surface);
+                    LOG_ERROR("    - wl_egl_window: %p", (void*)monitor->wl_egl_window);
+                    LOG_ERROR("  This monitor will be skipped during rendering");
+                    monitor->failed = true;
                 }
             }
             monitor = monitor->next;
@@ -1232,6 +1269,7 @@ int hyprlax_add_layer(hyprlax_context_t *ctx, const char *image_path,
      * - First layer is assigned z=0
      * - Subsequent layers get max_z + 10
      * IPC 'add' with explicit z will override this immediately after. */
+    pthread_mutex_lock(&ctx->layer_mutex);
     int maxz = INT_MIN;
     for (parallax_layer_t *it = ctx->layers; it; it = it->next) {
         if (it->z_index > maxz) maxz = it->z_index;
@@ -1240,6 +1278,7 @@ int hyprlax_add_layer(hyprlax_context_t *ctx, const char *image_path,
 
     ctx->layers = layer_list_add(ctx->layers, new_layer);
     ctx->layer_count = layer_list_count(ctx->layers);
+    pthread_mutex_unlock(&ctx->layer_mutex);
 
     LOG_DEBUG("Added layer: %s (shift=%.1f, opacity=%.1f, blur=%.1f)",
                 image_path, shift_multiplier, opacity, blur);
@@ -1250,16 +1289,55 @@ int hyprlax_add_layer(hyprlax_context_t *ctx, const char *image_path,
 /* Remove a layer by ID */
 void hyprlax_remove_layer(hyprlax_context_t *ctx, uint32_t layer_id) {
     if (!ctx) return;
-    /* Find layer to allow GL cleanup */
+    /* Find layer to allow GL cleanup - must lock before searching */
+    pthread_mutex_lock(&ctx->layer_mutex);
     parallax_layer_t *layer = layer_list_find(ctx->layers, layer_id);
     if (layer && layer->texture_id != 0) {
-        GLuint tid = (GLuint)layer->texture_id;
-        glDeleteTextures(1, &tid);
-        layer->texture_id = 0;
+        /*
+         * CRITICAL FIX: Properly cleanup GIF textures to prevent GPU VRAM exhaustion
+         *
+         * When a GIF layer is loaded, it allocates:
+         * - gif_textures: array of GLuint texture IDs (one per frame)
+         * - gif_delays: array of frame delays
+         * - gif_data: gifdec library handle
+         *
+         * Previously, only the current frame texture was deleted, causing a VRAM leak
+         * for all other frames. This fix ensures complete cleanup.
+         */
+        if (layer->is_gif && layer->gif_textures && layer->frame_count > 0) {
+            /* Delete all GIF frame textures */
+            glDeleteTextures(layer->frame_count, layer->gif_textures);
+            LOG_DEBUG("Cleaned up %d GIF textures for layer %u", layer->frame_count, layer_id);
+
+            /* Free the texture array */
+            free(layer->gif_textures);
+            layer->gif_textures = NULL;
+
+            /* Free the delays array */
+            if (layer->gif_delays) {
+                free(layer->gif_delays);
+                layer->gif_delays = NULL;
+            }
+
+            /* Close the GIF decoder handle */
+            if (layer->gif_data) {
+                gd_close_gif((gd_GIF *)layer->gif_data);
+                layer->gif_data = NULL;
+            }
+
+            layer->texture_id = 0;
+            layer->frame_count = 0;
+        } else {
+            /* Regular single-texture layer cleanup */
+            GLuint tid = (GLuint)layer->texture_id;
+            glDeleteTextures(1, &tid);
+            layer->texture_id = 0;
+        }
     }
     /* Remove from linked list and update count */
     ctx->layers = layer_list_remove(ctx->layers, layer_id);
     ctx->layer_count = layer_list_count(ctx->layers);
+    pthread_mutex_unlock(&ctx->layer_mutex);
 }
 
 /* moved to core/render_core.c: hyprlax_load_layer_textures */
@@ -1317,17 +1395,19 @@ void hyprlax_handle_workspace_change(hyprlax_context_t *ctx, int new_workspace) 
            target_x, target_y, shift_pixels, ctx->config.shift_percent);
 
     /* Update all layers with animation */
+    pthread_mutex_lock(&ctx->layer_mutex);
     parallax_layer_t *layer = ctx->layers;
     while (layer) {
         float layer_target_x = target_x * layer->shift_multiplier;
         float layer_target_y = target_y * layer->shift_multiplier;
 
         layer_update_offset(layer, layer_target_x, layer_target_y,
-                          ctx->config.animation_duration,
+                          (int)(ctx->config.animation_duration * 1000.0),
                           ctx->config.default_easing);
 
         layer = layer->next;
     }
+    pthread_mutex_unlock(&ctx->layer_mutex);
 
     ctx->workspace_offset_x = target_x;
     ctx->workspace_offset_y = target_y;
@@ -1358,17 +1438,19 @@ void hyprlax_handle_workspace_change_2d(hyprlax_context_t *ctx,
            target_x, target_y, shift_pixels, ctx->config.shift_percent);
 
     /* Update all layers with animation for both axes */
+    pthread_mutex_lock(&ctx->layer_mutex);
     parallax_layer_t *layer = ctx->layers;
     while (layer) {
         float layer_target_x = target_x * layer->shift_multiplier;
         float layer_target_y = target_y * layer->shift_multiplier;
 
         layer_update_offset(layer, layer_target_x, layer_target_y,
-                          ctx->config.animation_duration,
+                          (int)(ctx->config.animation_duration * 1000.0),
                           ctx->config.default_easing);
 
         layer = layer->next;
     }
+    pthread_mutex_unlock(&ctx->layer_mutex);
 
     ctx->workspace_offset_x = target_x;
     ctx->workspace_offset_y = target_y;
@@ -1380,11 +1462,16 @@ void hyprlax_handle_workspace_change_2d(hyprlax_context_t *ctx,
 void hyprlax_update_layers(hyprlax_context_t *ctx, double current_time) {
     if (!ctx) return;
 
+    /* Convert seconds to milliseconds for the animation system */
+    timestamp_ms_t current_time_ms = time_seconds_to_ms(current_time);
+
+    pthread_mutex_lock(&ctx->layer_mutex);
     parallax_layer_t *layer = ctx->layers;
     while (layer) {
-        layer_tick(layer, current_time);
+        layer_tick(layer, current_time_ms);
         layer = layer->next;
     }
+    pthread_mutex_unlock(&ctx->layer_mutex);
 }
 
 /* hyprlax_render_frame moved to core/render_core.c */
@@ -1418,8 +1505,23 @@ void hyprlax_shutdown(hyprlax_context_t *ctx) {
     if (ctx->debounce_timer_fd >= 0) { close(ctx->debounce_timer_fd); ctx->debounce_timer_fd = -1; }
     if (ctx->epoll_fd >= 0) { close(ctx->epoll_fd); ctx->epoll_fd = -1; }
 
-    /* Destroy layers */
+    /* Cleanup layer GPU resources before destroying layer structures */
     if (ctx->layers) {
+        parallax_layer_t *layer = ctx->layers;
+        while (layer) {
+            /* Cleanup GIF textures and regular textures */
+            if (layer->is_gif && layer->gif_textures && layer->frame_count > 0) {
+                glDeleteTextures(layer->frame_count, layer->gif_textures);
+                free(layer->gif_textures);
+                if (layer->gif_delays) free(layer->gif_delays);
+                if (layer->gif_data) gd_close_gif((gd_GIF *)layer->gif_data);
+            } else if (layer->texture_id != 0) {
+                GLuint tid = (GLuint)layer->texture_id;
+                glDeleteTextures(1, &tid);
+            }
+            layer = layer->next;
+        }
+        /* Now destroy layer structures */
         layer_list_destroy(ctx->layers);
         ctx->layers = NULL;
     }

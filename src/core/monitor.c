@@ -2,16 +2,23 @@
  * monitor.c - Multi-monitor management implementation
  */
 
-#include "monitor.h"
-#include "hyprlax.h"
-#include "core.h"
-#include "log.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
+#include <wayland-client.h>
+#include <wayland-egl.h>
+#include <EGL/egl.h>
+#include "../protocols/wlr-layer-shell-client-protocol.h"
+#include "../protocols/fractional-scale-v1-client-protocol.h"
+#include "../protocols/viewporter-client-protocol.h"
+#include "monitor.h"
+#include "hyprlax.h"
+#include "core.h"
+#include "log.h"
 #include "include/defaults.h"
+#include "include/renderer.h"
 
 /* Get current time in seconds */
 static double get_time(void) {
@@ -57,6 +64,7 @@ monitor_instance_t* monitor_instance_create(const char *name) {
     strncpy(monitor->name, name ? name : "unknown", sizeof(monitor->name) - 1);
     monitor->scale = 1;
     monitor->refresh_rate = 60;
+    monitor->failed = false;
 
     /* Initialize workspace context (default to numeric) */
     monitor->current_context.model = WS_MODEL_GLOBAL_NUMERIC;
@@ -75,11 +83,66 @@ monitor_instance_t* monitor_instance_create(const char *name) {
 void monitor_instance_destroy(monitor_instance_t *monitor) {
     if (!monitor) return;
 
-    /* Free config if allocated */
-    if (monitor->config) {
-        free(monitor->config);
+    LOG_DEBUG("Destroying monitor %s", monitor->name);
+
+    /* Clean up resources in reverse order of creation to ensure proper cleanup */
+
+    /* 1. Clean up pending frame callback to prevent dangling Wayland objects */
+    if (monitor->frame_callback) {
+        wl_callback_destroy(monitor->frame_callback);
+        monitor->frame_callback = NULL;
+    }
+    monitor->frame_pending = false;
+
+    /* 1b. Destroy fractional scale object (if exists) */
+    if (monitor->wp_fractional_scale) {
+        wp_fractional_scale_v1_destroy((struct wp_fractional_scale_v1 *)monitor->wp_fractional_scale);
+        monitor->wp_fractional_scale = NULL;
+        LOG_DEBUG("  Destroyed fractional scale for monitor %s", monitor->name);
     }
 
+    /* 1c. Destroy viewport object (if exists) */
+    if (monitor->wp_viewport) {
+        wp_viewport_destroy((struct wp_viewport *)monitor->wp_viewport);
+        monitor->wp_viewport = NULL;
+        LOG_DEBUG("  Destroyed viewport for monitor %s", monitor->name);
+    }
+
+    /* 2. Destroy EGL surface (if exists) */
+    if (monitor->egl_surface) {
+        gles2_destroy_monitor_surface(monitor->egl_surface);
+        monitor->egl_surface = NULL;
+        LOG_DEBUG("  Destroyed EGL surface for monitor %s", monitor->name);
+    }
+
+    /* 3. Destroy EGL window (if exists) */
+    if (monitor->wl_egl_window) {
+        wl_egl_window_destroy(monitor->wl_egl_window);
+        monitor->wl_egl_window = NULL;
+        LOG_DEBUG("  Destroyed EGL window for monitor %s", monitor->name);
+    }
+
+    /* 4. Destroy layer surface (if exists) */
+    if (monitor->layer_surface) {
+        zwlr_layer_surface_v1_destroy(monitor->layer_surface);
+        monitor->layer_surface = NULL;
+        LOG_DEBUG("  Destroyed layer surface for monitor %s", monitor->name);
+    }
+
+    /* 5. Destroy Wayland surface (if exists) */
+    if (monitor->wl_surface) {
+        wl_surface_destroy(monitor->wl_surface);
+        monitor->wl_surface = NULL;
+        LOG_DEBUG("  Destroyed Wayland surface for monitor %s", monitor->name);
+    }
+
+    /* 6. Free config if allocated */
+    if (monitor->config) {
+        free(monitor->config);
+        monitor->config = NULL;
+    }
+
+    LOG_DEBUG("Monitor %s fully destroyed", monitor->name);
     free(monitor);
 }
 
@@ -411,6 +474,8 @@ void monitor_handle_workspace_context_change(hyprlax_context_t *ctx,
                 LOG_DEBUG("  Updating layers with absolute target: X=%.1f, Y=%.1f", absolute_target_x, absolute_target_y);
             }
 
+            pthread_mutex_lock(&ctx->layer_mutex);
+
             parallax_layer_t *layer = ctx->layers;
             int layer_count = 0;
 
@@ -442,7 +507,7 @@ void monitor_handle_workspace_context_change(hyprlax_context_t *ctx,
                 }
 
                 layer_update_offset(layer, layer_target_x, layer_target_y,
-                                  monitor->config ? monitor->config->animation_duration : 1.0,
+                                  (int)((monitor->config ? monitor->config->animation_duration : 1.0) * 1000.0),
                                   monitor->config ? monitor->config->default_easing : EASE_CUBIC_OUT);
                 /* Defensive: if any callee scribbled over the linked-list pointer, restore it */
                 if (layer->next != next_layer) {
@@ -462,6 +527,8 @@ void monitor_handle_workspace_context_change(hyprlax_context_t *ctx,
                 }
                 layer = next_layer;
             }
+
+            pthread_mutex_unlock(&ctx->layer_mutex);
         } else {
             if (ctx && ctx->config.debug) {
                 fprintf(stderr, "[DEBUG]   WARNING: No layers to update!\n");
@@ -668,6 +735,13 @@ const char* monitor_get_name(monitor_instance_t *monitor) {
 /* Check if monitor is active */
 bool monitor_is_active(monitor_instance_t *monitor) {
     return monitor && monitor->wl_surface != NULL;
+}
+
+/* Get effective scale factor (fractional if available, otherwise integer) */
+double monitor_get_effective_scale(const monitor_instance_t *monitor) {
+    if (!monitor) return 1.0;
+    if (monitor->fractional_scale > 0.0) return monitor->fractional_scale;
+    return (double)monitor->scale;
 }
 
 /* Compute effective shift in pixels given config and monitor width.

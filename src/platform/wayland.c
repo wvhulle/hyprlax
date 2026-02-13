@@ -9,8 +9,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <strings.h>
 #include <time.h>
 #include <poll.h>
+#include <errno.h>
+#include <math.h>
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include <GLES2/gl2.h>
@@ -21,6 +24,8 @@
 #include "../include/defaults.h"
 #include "../include/renderer.h"
 #include "../../protocols/wlr-layer-shell-client-protocol.h"
+#include "../../protocols/fractional-scale-v1-client-protocol.h"
+#include "../../protocols/viewporter-client-protocol.h"
 #include "../include/hyprlax.h"
 #include "../core/monitor.h"
 #include "../include/wayland_api.h"
@@ -56,6 +61,10 @@ typedef struct {
     /* Layer shell protocol */
     struct zwlr_layer_shell_v1 *layer_shell;
     struct zwlr_layer_surface_v1 *layer_surface;  /* Legacy single surface */
+
+    /* Fractional scaling protocols */
+    struct wp_fractional_scale_manager_v1 *fractional_scale_manager;
+    struct wp_viewporter *viewporter;
 
     /* Window state */
     int width;
@@ -240,6 +249,14 @@ static void registry_global(void *data, struct wl_registry *registry,
 } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0) {
     wl_data->layer_shell = wl_registry_bind(registry, id,
                                            &zwlr_layer_shell_v1_interface, 1);
+} else if (strcmp(interface, "wp_fractional_scale_manager_v1") == 0) {
+    wl_data->fractional_scale_manager = wl_registry_bind(registry, id,
+        &wp_fractional_scale_manager_v1_interface, 1);
+    LOG_DEBUG("Bound wp_fractional_scale_manager_v1");
+} else if (strcmp(interface, "wp_viewporter") == 0) {
+    wl_data->viewporter = wl_registry_bind(registry, id,
+        &wp_viewporter_interface, 1);
+    LOG_DEBUG("Bound wp_viewporter");
 } else if (strcmp(interface, "wl_seat") == 0) {
     wl_data->seat = wl_registry_bind(registry, id, &wl_seat_interface, 5);
     if (wl_data->seat) {
@@ -250,10 +267,31 @@ static void registry_global(void *data, struct wl_registry *registry,
 
 static void registry_global_remove(void *data, struct wl_registry *registry,
                                   uint32_t id) {
-    /* Handle removal if needed */
-    (void)data;
+    wayland_data_t *wl_data = (wayland_data_t *)data;
     (void)registry;
-    (void)id;
+
+    if (!wl_data) return;
+
+    /* Find and remove output info from linked list */
+    output_info_t **curr = &wl_data->outputs;
+    while (*curr) {
+        if ((*curr)->global_id == id) {
+            output_info_t *to_free = *curr;
+            *curr = to_free->next;  /* Unlink from list */
+
+            /* Clean up Wayland objects */
+            if (to_free->output) {
+                wl_output_destroy(to_free->output);
+            }
+
+            /* Free structure */
+            free(to_free);
+            wl_data->output_count--;
+            LOG_DEBUG("Cleaned up output info for ID %u", id);
+            return;
+        }
+        curr = &(*curr)->next;
+    }
 }
 
 /* Layer surface listener callbacks */
@@ -601,6 +639,60 @@ static void wayland_show_window(void) {
     }
 }
 
+/* Fractional scale preferred_scale event: scale is in 1/120ths */
+static void fractional_scale_preferred(void *data,
+                                       struct wp_fractional_scale_v1 *frac_scale,
+                                       uint32_t scale_times_120) {
+    (void)frac_scale;
+    monitor_instance_t *monitor = (monitor_instance_t *)data;
+    if (!monitor) return;
+
+    double new_scale = scale_times_120 / 120.0;
+    LOG_INFO("Monitor %s: fractional scale preferred: %.4f (raw: %u/120)",
+             monitor->name, new_scale, scale_times_120);
+    monitor->fractional_scale = new_scale;
+
+    /* Check if scale is truly fractional (not integer) */
+    bool is_fractional = (scale_times_120 % 120) != 0;
+
+    /* Resize EGL window to match new physical pixel dimensions */
+    if (monitor->wl_egl_window && monitor->width > 0 && monitor->height > 0) {
+        int phys_w = (int)ceil(monitor->width * new_scale);
+        int phys_h = (int)ceil(monitor->height * new_scale);
+        wl_egl_window_resize(monitor->wl_egl_window, phys_w, phys_h, 0, 0);
+
+        if (is_fractional) {
+            /* Fractional scale: need viewport to set logical surface size,
+             * since wl_surface.set_buffer_scale only handles integers. */
+            if (!monitor->wp_viewport && g_wayland_data && g_wayland_data->viewporter) {
+                struct wp_viewport *vp = wp_viewporter_get_viewport(
+                    g_wayland_data->viewporter, monitor->wl_surface);
+                if (vp) {
+                    monitor->wp_viewport = vp;
+                    LOG_DEBUG("Created viewport for monitor %s (fractional scale %.4f)",
+                              monitor->name, new_scale);
+                }
+            }
+            if (monitor->wp_viewport) {
+                wp_viewport_set_destination((struct wp_viewport *)monitor->wp_viewport,
+                                           monitor->width, monitor->height);
+            }
+        } else {
+            /* Integer scale: no viewport needed, existing integer scale
+             * from wl_output listener handles this case. */
+            LOG_DEBUG("Monitor %s: integer scale %d, no viewport needed",
+                      monitor->name, (int)(new_scale + 0.5));
+        }
+
+        LOG_DEBUG("Monitor %s: resized EGL window to %dx%d (logical %dx%d, scale %.4f, fractional=%d)",
+                  monitor->name, phys_w, phys_h, monitor->width, monitor->height, new_scale, is_fractional);
+    }
+}
+
+static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
+    .preferred_scale = fractional_scale_preferred,
+};
+
 /* Create surface for a specific monitor */
 int wayland_create_monitor_surface(monitor_instance_t *monitor) {
     if (!monitor || !g_wayland_data || !g_wayland_data->compositor) {
@@ -666,12 +758,31 @@ int wayland_create_monitor_surface(monitor_instance_t *monitor) {
         }
     }
 
+    /* Set up fractional scale listener for this monitor surface.
+     * Viewport is NOT created eagerly — it's only needed for fractional
+     * (non-integer) scaling and will be created on demand in the
+     * fractional_scale_preferred callback.  Creating viewport on surfaces
+     * with integer scale can cause compositors (e.g. Hyprland) to handle
+     * background layer-shell buffer management differently, leading to
+     * eglSwapBuffers blocking for seconds. */
+    if (monitor->wl_surface && g_wayland_data->fractional_scale_manager) {
+        struct wp_fractional_scale_v1 *frac = wp_fractional_scale_manager_v1_get_fractional_scale(
+            g_wayland_data->fractional_scale_manager, monitor->wl_surface);
+        if (frac) {
+            monitor->wp_fractional_scale = frac;
+            wp_fractional_scale_v1_add_listener(frac, &fractional_scale_listener, monitor);
+            LOG_DEBUG("Created fractional scale listener for monitor %s", monitor->name);
+        }
+    }
+
     /* Create EGL window for this surface */
     if (monitor->wl_surface) {
+        double eff_scale = monitor_get_effective_scale(monitor);
+        int phys_w = (int)ceil(monitor->width * eff_scale);
+        int phys_h = (int)ceil(monitor->height * eff_scale);
         monitor->wl_egl_window = wl_egl_window_create(
             monitor->wl_surface,
-            monitor->width * monitor->scale,
-            monitor->height * monitor->scale);
+            phys_w, phys_h);
 
         if (!monitor->wl_egl_window) {
             LOG_ERROR("Failed to create EGL window for monitor %s", monitor->name);
@@ -690,10 +801,39 @@ int wayland_create_monitor_surface(monitor_instance_t *monitor) {
             /* Get the EGL surface creation function from renderer */
             monitor->egl_surface = gles2_create_monitor_surface(monitor->wl_egl_window);
 
-            if (monitor->egl_surface) {
-                LOG_DEBUG("Created EGL surface for monitor %s", monitor->name);
+            if (!monitor->egl_surface) {
+                LOG_ERROR("Failed to create EGL surface for monitor %s", monitor->name);
+
+                /* CRITICAL: Clean up partial state to prevent Wayland resource leaks */
+                LOG_ERROR("  Cleaning up partial monitor state:");
+                LOG_ERROR("    - wl_surface: %p", (void*)monitor->wl_surface);
+                LOG_ERROR("    - layer_surface: %p", (void*)monitor->layer_surface);
+                LOG_ERROR("    - wl_egl_window: %p", (void*)monitor->wl_egl_window);
+
+                /* 1. Destroy EGL window */
+                if (monitor->wl_egl_window) {
+                    wl_egl_window_destroy(monitor->wl_egl_window);
+                    monitor->wl_egl_window = NULL;
+                }
+
+                /* 2. Destroy layer surface */
+                if (monitor->layer_surface) {
+                    zwlr_layer_surface_v1_destroy(monitor->layer_surface);
+                    monitor->layer_surface = NULL;
+                }
+
+                /* 3. Destroy Wayland surface */
+                if (monitor->wl_surface) {
+                    wl_surface_destroy(monitor->wl_surface);
+                    monitor->wl_surface = NULL;
+                }
+
+                LOG_ERROR("Monitor %s initialization failed - resources cleaned up", monitor->name);
+                monitor->failed = true;
+                return HYPRLAX_ERROR_GL_INIT;
             } else {
-                LOG_WARN("Failed to create EGL surface for monitor %s", monitor->name);
+                LOG_INFO("Created EGL surface for monitor %s", monitor->name);
+                monitor->failed = false;
             }
         }
     }
@@ -717,8 +857,19 @@ static int wayland_poll_events(platform_event_t *event) {
     if (g_wayland_data && g_wayland_data->display) {
         /* First dispatch any pending events */
         wl_display_dispatch_pending(g_wayland_data->display);
-        /* Then flush any pending requests */
-        wl_display_flush(g_wayland_data->display);
+
+        /* Then flush any pending requests - check for errors */
+        if (wl_display_flush(g_wayland_data->display) < 0) {
+            int err = wl_display_get_error(g_wayland_data->display);
+            LOG_ERROR("Wayland display connection lost during flush: error %d (%s)",
+                      err, strerror(errno));
+            /* Signal graceful shutdown - compositor disconnect detected */
+            if (g_wayland_data->ctx) {
+                g_wayland_data->ctx->running = false;
+            }
+            event->type = PLATFORM_EVENT_CLOSE;
+            return HYPRLAX_SUCCESS;
+        }
 
         /* Opportunistically drain readable Wayland events without blocking */
         int fd = wl_display_get_fd(g_wayland_data->display);
@@ -726,7 +877,16 @@ static int wayland_poll_events(platform_event_t *event) {
             struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
             int pret = poll(&pfd, 1, 0);
             if (pret > 0) {
-                wl_display_read_events(g_wayland_data->display);
+                if (wl_display_read_events(g_wayland_data->display) < 0) {
+                    int err = wl_display_get_error(g_wayland_data->display);
+                    LOG_ERROR("Wayland protocol error during read_events: %d", err);
+                    /* Signal graceful shutdown - protocol error detected */
+                    if (g_wayland_data->ctx) {
+                        g_wayland_data->ctx->running = false;
+                    }
+                    event->type = PLATFORM_EVENT_CLOSE;
+                    return HYPRLAX_SUCCESS;
+                }
             } else {
                 wl_display_cancel_read(g_wayland_data->display);
             }
@@ -812,8 +972,16 @@ static void wayland_flush_events(void) {
         if (g_wayland_data->surface) {
             wl_surface_commit(g_wayland_data->surface);
         }
-        /* Flush display to send all pending requests */
-        wl_display_flush(g_wayland_data->display);
+        /* Flush display to send all pending requests - check for errors */
+        if (wl_display_flush(g_wayland_data->display) < 0) {
+            int err = wl_display_get_error(g_wayland_data->display);
+            LOG_ERROR("Wayland display connection lost during flush_events: error %d (%s)",
+                      err, strerror(errno));
+            /* Signal graceful shutdown */
+            if (g_wayland_data->ctx) {
+                g_wayland_data->ctx->running = false;
+            }
+        }
     }
 }
 
@@ -1138,11 +1306,20 @@ static const char* wayland_get_backend_name(void) {
 }
 
 /* Commit a monitor's Wayland surface */
+/* Check if frame-callback pacing is enabled (default: off).
+ * Enable with HYPRLAX_FRAME_CALLBACK=1 for compositors like Niri. */
+static bool wl_frame_callback_enabled(void) {
+    const char *v = getenv("HYPRLAX_FRAME_CALLBACK");
+    if (v && (*v == '1' || strcasecmp(v, "true") == 0 || strcasecmp(v, "yes") == 0))
+        return true;
+    return false;
+}
+
 void wayland_commit_monitor_surface(monitor_instance_t *monitor) {
     if (monitor && monitor->wl_surface) {
-        /* Request a frame callback to pace the next frame if not already pending */
-        const char *use_fc = getenv("HYPRLAX_FRAME_CALLBACK");
-        if (use_fc && *use_fc && !monitor->frame_pending) {
+        /* Request a frame callback to pace the next frame if not already pending.
+         * Frame callbacks are enabled by default; disable with HYPRLAX_NO_FRAME_CALLBACK=1. */
+        if (wl_frame_callback_enabled() && !monitor->frame_pending) {
             struct wl_callback *cb = wl_surface_frame(monitor->wl_surface);
             if (cb) {
                 monitor->frame_callback = cb;

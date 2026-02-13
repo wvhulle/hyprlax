@@ -10,6 +10,8 @@
 #include <string.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+/* GLES3 header for fence sync support (GL_ARB_sync / glFenceSync) */
+#include <GLES3/gl3.h>
 #include "../include/renderer.h"
 #include "../include/shader.h"
 #include "../include/hyprlax_internal.h"
@@ -305,11 +307,39 @@ static void gles2_present(void) {
                         g_gles2_data->current_surface :
                         g_gles2_data->egl_surface;
 
-    /* Allow skipping glFinish via env for performance testing */
+    /*
+     * GPU synchronization before buffer swap:
+     *
+     * Default: glFinish() ensures GPU commands complete before swap.
+     * On Wayland, eglSwapBuffers with the default swap interval (1) blocks
+     * until the compositor's frame callback fires.  glFinish() ensures GPU
+     * work is done so the swap can proceed promptly when the callback arrives.
+     *
+     * HYPRLAX_NO_GLFINISH=1: Skip glFinish, use glFlush instead.
+     * HYPRLAX_GPU_FENCE=1: Use glFenceSync with timeout (hyprlock-safe).
+     */
     const char *no_finish = getenv("HYPRLAX_NO_GLFINISH");
-    if (!no_finish || strcmp(no_finish, "0") == 0) {
+    const char *use_gpu_fence = getenv("HYPRLAX_GPU_FENCE");
+    if (use_gpu_fence && strcmp(use_gpu_fence, "1") == 0) {
+        GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (fence) {
+            GLenum result = glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 16000000);
+            if (result == GL_TIMEOUT_EXPIRED) {
+                LOG_WARN("GPU sync timeout - compositor may be suspended");
+            } else if (result == GL_WAIT_FAILED) {
+                LOG_WARN("GPU sync failed - continuing anyway");
+            }
+            glDeleteSync(fence);
+        } else {
+            glFlush();
+        }
+    } else if (no_finish && strcmp(no_finish, "1") == 0) {
+        glFlush();
+    } else {
+        /* Default: wait for GPU to finish before swap */
         glFinish();
     }
+
     eglSwapBuffers(g_gles2_data->egl_display, surface);
 }
 
@@ -1026,6 +1056,15 @@ int gles2_make_current(EGLSurface surface) {
     g_gles2_data->current_surface = surface;
 
     return HYPRLAX_SUCCESS;
+}
+
+/* Destroy a monitor's EGL surface */
+void gles2_destroy_monitor_surface(EGLSurface surface) {
+    if (!g_gles2_data || surface == EGL_NO_SURFACE) {
+        return;
+    }
+
+    eglDestroySurface(g_gles2_data->egl_display, surface);
 }
 
 /* OpenGL ES 2.0 renderer operations */

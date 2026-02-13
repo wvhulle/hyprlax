@@ -6,16 +6,23 @@
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include <errno.h>
 #include <poll.h>
+#include <signal.h>
 #include "../include/hyprlax.h"
 #include <stdlib.h>
 #include "../include/platform.h"
 #include "../include/compositor.h"
 #include "../include/log.h"
+#include "../include/resource_monitor.h"
+#include "../include/time_utils.h"
 #include "../ipc.h"
 #include "../include/defaults.h"
+
+/* External atomic shutdown flag from main.c for signal-safe shutdown */
+extern volatile sig_atomic_t g_shutdown_requested;
 
 int create_timerfd_monotonic(void) {
     int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
@@ -31,11 +38,20 @@ void disarm_timerfd(int fd) {
 void arm_timerfd_ms(int fd, int initial_ms, int interval_ms) {
     if (fd < 0) return;
     struct itimerspec its;
-    its.it_value.tv_sec = initial_ms / 1000;
-    its.it_value.tv_nsec = (initial_ms % 1000) * 1000000L;
-    its.it_interval.tv_sec = interval_ms / 1000;
-    its.it_interval.tv_nsec = (interval_ms % 1000) * 1000000L;
-    timerfd_settime(fd, 0, &its, NULL);
+
+    /* Use 64-bit intermediate calculation to prevent overflow */
+    int64_t initial_ns = (int64_t)initial_ms * 1000000LL;
+    int64_t interval_ns = (int64_t)interval_ms * 1000000LL;
+
+    its.it_value.tv_sec = initial_ns / 1000000000LL;
+    its.it_value.tv_nsec = initial_ns % 1000000000LL;
+
+    its.it_interval.tv_sec = interval_ns / 1000000000LL;
+    its.it_interval.tv_nsec = interval_ns % 1000000000LL;
+
+    if (timerfd_settime(fd, 0, &its, NULL) < 0) {
+        LOG_ERROR("Failed to arm timerfd: %s", strerror(errno));
+    }
 }
 
 int epoll_add_fd(int epfd, int fd, uint32_t events) {
@@ -112,11 +128,24 @@ void hyprlax_clear_timerfd(int fd) {
     (void)read(fd, &expirations, sizeof(expirations));
 }
 
-/* Internal time helper */
+/* Internal time helper - returns milliseconds for overflow safety */
+static timestamp_ms_t ev_get_time_ms(void) {
+    return time_get_monotonic_ms();
+}
+
+/* Check if frame-callback pacing is enabled (default: off).
+ * Enable with HYPRLAX_FRAME_CALLBACK=1 for compositors like Niri. */
+static bool ev_frame_callback_enabled(void) {
+    const char *v = getenv("HYPRLAX_FRAME_CALLBACK");
+    if (v && (*v == '1' || strcasecmp(v, "true") == 0 || strcasecmp(v, "yes") == 0))
+        return true;
+    return false;
+}
+
+/* Legacy compatibility wrapper - returns seconds as double */
 static double ev_get_time(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec + ts.tv_nsec / 1000000000.0;
+    timestamp_ms_t ms = time_get_monotonic_ms();
+    return time_ms_to_seconds(ms);
 }
 
 /* Main run loop */
@@ -141,12 +170,11 @@ int hyprlax_run(hyprlax_context_t *ctx) {
     double debug_timer = 0.0;
     bool needs_render = true;
 
-    while (ctx->running) {
+    while (ctx->running && !g_shutdown_requested) {
         int current_fps = ctx->config.target_fps;
         if (current_fps <= 0) current_fps = HYPRLAX_DEFAULT_FPS;
         if (current_fps != prev_target_fps) {
-            const char *fc_env = getenv("HYPRLAX_FRAME_CALLBACK");
-            bool use_frame_callback = (fc_env && *fc_env);
+            bool use_frame_callback = ev_frame_callback_enabled();
             if (!use_frame_callback) {
                 hyprlax_arm_frame_timer(ctx, current_fps);
             }
@@ -154,10 +182,25 @@ int hyprlax_run(hyprlax_context_t *ctx) {
         }
         frame_time = 1.0 / (double)current_fps;
 
+        /* Check shutdown flag and exit cleanly if requested */
+        if (g_shutdown_requested) {
+            if (ctx->config.debug) {
+                LOG_DEBUG("Shutdown signal received, exiting main loop");
+            }
+            ctx->running = false;
+            break;
+        }
+
         /* diagnostics placeholders retained for future verbose tracing */
         double current_time = ev_get_time();
         ctx->delta_time = current_time - last_frame_time;
         last_frame_time = current_time;
+
+        /* Resource monitoring check (periodic) */
+        if (ctx->resource_monitor &&
+            resource_monitor_should_check(ctx->resource_monitor, current_time)) {
+            resource_monitor_check(ctx->resource_monitor);
+        }
 
         platform_event_t platform_event;
         if (PLATFORM_POLL_EVENTS(ctx->platform, &platform_event) == HYPRLAX_SUCCESS) {
@@ -169,7 +212,6 @@ int hyprlax_run(hyprlax_context_t *ctx) {
                 default: break;
             }
         }
-
         if (ctx->ipc_ctx && ipc_process_commands((ipc_context_t*)ctx->ipc_ctx)) {
             needs_render = true;
         }
@@ -181,29 +223,64 @@ int hyprlax_run(hyprlax_context_t *ctx) {
                     extern void process_workspace_event(hyprlax_context_t *ctx, const compositor_event_t *comp_event);
                     process_workspace_event(ctx, &comp_event);
                     needs_render = true;
+                } else if (comp_event.type == COMPOSITOR_EVENT_SCREEN_LOCK) {
+                    /* Screen locked - update context state and stop rendering */
+                    ctx->screen_locked = comp_event.data.lock.locked;
+                    if (ctx->config.debug) {
+                        LOG_DEBUG("Processing screen lock event (locked=%d)", ctx->screen_locked);
+                    }
+                    /* Don't trigger animations or renders while locked */
+                } else if (comp_event.type == COMPOSITOR_EVENT_SCREEN_UNLOCK) {
+                    /* Screen unlocked - update context state and force render */
+                    ctx->screen_locked = comp_event.data.lock.locked;
+                    if (ctx->config.debug) {
+                        LOG_DEBUG("Processing screen unlock event (locked=%d)", ctx->screen_locked);
+                    }
+                    /* Force a render to refresh display immediately */
+                    needs_render = true;
                 }
             }
         }
-
         bool animations_active = false;
         {
+            /* Lock layer list for safe iteration */
+            pthread_mutex_lock(&ctx->layer_mutex);
+
             parallax_layer_t *layer = ctx->layers;
             while (layer) {
                 if ((layer->is_gif && layer->frame_count > 1) || animation_is_active(&layer->x_animation) || animation_is_active(&layer->y_animation)) { animations_active = true; break; }
                 layer = layer->next;
             }
+
+            pthread_mutex_unlock(&ctx->layer_mutex);
+
             if (!animations_active && ctx->monitors) {
             monitor_instance_t *m = ctx->monitors->head;
             while (m) { if (m->animating) { animations_active = true; break; } m = m->next; }
             }
         }
 
-        const char *use_fc = getenv("HYPRLAX_FRAME_CALLBACK");
+        bool use_fc = ev_frame_callback_enabled();
         if (animations_active) {
-            if (use_fc && *use_fc && ctx->monitors) {
+            if (use_fc && ctx->monitors) {
                 bool can_render = false;
                 monitor_instance_t *m = ctx->monitors->head;
-                while (m) { if (!m->frame_pending) { can_render = true; break; } m = m->next; }
+                while (m) {
+                    if (!m->frame_pending) {
+                        can_render = true;
+                        break;
+                    }
+                    /* If frame_pending but enough time elapsed, the render path
+                     * will timeout and clear it — so allow render. */
+                    double elapsed = current_time - m->last_frame_time;
+                    double timeout = m->target_frame_time * 2.0 / 1000.0;
+                    if (timeout < 0.05) timeout = 0.05;
+                    if (elapsed >= timeout) {
+                        can_render = true;
+                        break;
+                    }
+                    m = m->next;
+                }
                 needs_render = needs_render || can_render;
             } else {
                 needs_render = true;
@@ -213,8 +290,7 @@ int hyprlax_run(hyprlax_context_t *ctx) {
         if (needs_render) {
             double time_since_render = current_time - last_render_time;
             if (time_since_render < frame_time) {
-                const char *fc_env = getenv("HYPRLAX_FRAME_CALLBACK");
-                bool use_frame_callback = (fc_env && *fc_env);
+                bool use_frame_callback = ev_frame_callback_enabled();
                 if (!use_frame_callback) {
                     int sleep_ms = (int)((frame_time - time_since_render) * 1000.0);
                     if (sleep_ms > 0) {
@@ -246,28 +322,56 @@ int hyprlax_run(hyprlax_context_t *ctx) {
                 }
             }
         } else {
-            const char *fc_env = getenv("HYPRLAX_FRAME_CALLBACK");
-            bool use_frame_callback = (fc_env && *fc_env);
-            if (!use_frame_callback) {
-                if (animations_active) {
-                    if (!ctx->frame_timer_armed) hyprlax_arm_frame_timer(ctx, ctx->config.target_fps);
-                } else {
-                    if (ctx->frame_timer_armed) hyprlax_disarm_frame_timer(ctx);
-                    if (needs_render) {
-                        double target_wake_time = last_render_time + frame_time;
-                        double remain = target_wake_time - current_time;
-                        int remain_ms = (int)(remain * 1000.0);
-                        if (remain_ms < 1) remain_ms = 1;
-                        arm_timerfd_ms(ctx->frame_timer_fd, remain_ms, 0);
-                    }
+            bool use_frame_callback = ev_frame_callback_enabled();
+            if (animations_active) {
+                /* Always arm the frame timer as a fallback wakeup when
+                 * animations are active, even with frame callbacks enabled.
+                 * This prevents the epoll_wait from stalling when some
+                 * monitors are occluded and their frame callbacks never fire
+                 * (e.g., Niri fullscreen on 2 of 3 monitors). */
+                if (!ctx->frame_timer_armed) hyprlax_arm_frame_timer(ctx, ctx->config.target_fps);
+            } else if (!use_frame_callback) {
+                if (ctx->frame_timer_armed) hyprlax_disarm_frame_timer(ctx);
+                if (needs_render) {
+                    double target_wake_time = last_render_time + frame_time;
+                    double remain = target_wake_time - current_time;
+                    int remain_ms = (int)(remain * 1000.0);
+                    if (remain_ms < 1) remain_ms = 1;
+                    arm_timerfd_ms(ctx->frame_timer_fd, remain_ms, 0);
                 }
+            } else {
+                /* Frame callbacks enabled, no animations — disarm timer and
+                 * let epoll_wait block until Wayland events arrive. */
+                if (ctx->frame_timer_armed) hyprlax_disarm_frame_timer(ctx);
             }
 
             if (ctx->epoll_fd >= 0) {
                 struct epoll_event evlist[6];
-                int n = epoll_wait(ctx->epoll_fd, evlist, 6, -1);
+                /* Use 5-second timeout instead of infinite wait to prevent
+                 * tight loops on errors and allow periodic watchdog checks */
+                int n = epoll_wait(ctx->epoll_fd, evlist, 6, 5000);
                 if (n < 0) {
-                    if (errno == EINTR) { if (!ctx->running) break; continue; }
+                    /* Handle EINTR (interrupted by signal) - check shutdown and continue */
+                    if (errno == EINTR) {
+                        if (!ctx->running || g_shutdown_requested) break;
+                        continue;
+                    }
+                    /* Any other error is critical - log and exit gracefully */
+                    LOG_ERROR("epoll_wait failed: %s (errno=%d)", strerror(errno), errno);
+                    LOG_ERROR("Initiating graceful shutdown due to epoll error");
+                    ctx->running = false;
+                    break;
+                }
+                if (n == 0) {
+                    /* Timeout occurred - no events for 5 seconds (watchdog) */
+                    if (ctx->config.debug) {
+                        LOG_DEBUG("Event loop watchdog: no events for 5 seconds");
+                    }
+                    /* Check shutdown flag before continuing */
+                    if (g_shutdown_requested) {
+                        ctx->running = false;
+                        break;
+                    }
                     continue;
                 }
                 if (n > 0) {

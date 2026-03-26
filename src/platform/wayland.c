@@ -655,11 +655,12 @@ static void fractional_scale_preferred(void *data,
     /* Check if scale is truly fractional (not integer) */
     bool is_fractional = (scale_times_120 % 120) != 0;
 
-    /* Resize EGL window to match new physical pixel dimensions */
+    /* Resize EGL window to match physical pixel dimensions.
+     * monitor->width/height already hold physical pixels from wl_output.mode,
+     * so we must NOT multiply by scale again. */
     if (monitor->wl_egl_window && monitor->width > 0 && monitor->height > 0) {
-        int phys_w = (int)ceil(monitor->width * new_scale);
-        int phys_h = (int)ceil(monitor->height * new_scale);
-        wl_egl_window_resize(monitor->wl_egl_window, phys_w, phys_h, 0, 0);
+        wl_egl_window_resize(monitor->wl_egl_window,
+                             monitor->width, monitor->height, 0, 0);
 
         if (is_fractional) {
             /* Fractional scale: need viewport to set logical surface size,
@@ -674,8 +675,11 @@ static void fractional_scale_preferred(void *data,
                 }
             }
             if (monitor->wp_viewport) {
+                /* Logical size = physical / scale */
+                int logical_w = (int)ceil(monitor->width / new_scale);
+                int logical_h = (int)ceil(monitor->height / new_scale);
                 wp_viewport_set_destination((struct wp_viewport *)monitor->wp_viewport,
-                                           monitor->width, monitor->height);
+                                           logical_w, logical_h);
             }
         } else {
             /* Integer scale: no viewport needed, existing integer scale
@@ -684,8 +688,8 @@ static void fractional_scale_preferred(void *data,
                       monitor->name, (int)(new_scale + 0.5));
         }
 
-        LOG_DEBUG("Monitor %s: resized EGL window to %dx%d (logical %dx%d, scale %.4f, fractional=%d)",
-                  monitor->name, phys_w, phys_h, monitor->width, monitor->height, new_scale, is_fractional);
+        LOG_DEBUG("Monitor %s: EGL window %dx%d (physical), scale %.4f, fractional=%d",
+                  monitor->name, monitor->width, monitor->height, new_scale, is_fractional);
     }
 }
 
@@ -775,14 +779,12 @@ int wayland_create_monitor_surface(monitor_instance_t *monitor) {
         }
     }
 
-    /* Create EGL window for this surface */
+    /* Create EGL window for this surface.
+     * monitor->width/height are already physical pixels from wl_output.mode. */
     if (monitor->wl_surface) {
-        double eff_scale = monitor_get_effective_scale(monitor);
-        int phys_w = (int)ceil(monitor->width * eff_scale);
-        int phys_h = (int)ceil(monitor->height * eff_scale);
         monitor->wl_egl_window = wl_egl_window_create(
             monitor->wl_surface,
-            phys_w, phys_h);
+            monitor->width, monitor->height);
 
         if (!monitor->wl_egl_window) {
             LOG_ERROR("Failed to create EGL window for monitor %s", monitor->name);

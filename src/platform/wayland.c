@@ -279,6 +279,23 @@ static void registry_global_remove(void *data, struct wl_registry *registry,
             output_info_t *to_free = *curr;
             *curr = to_free->next;  /* Unlink from list */
 
+            /* Destroy the corresponding monitor instance so its EGL surface,
+             * layer surface, viewport, fractional-scale object and FDs are
+             * freed.  Without this the monitor stays orphaned in the list,
+             * leaking ~62 MB of GPU/Wayland resources and ~15 FDs per
+             * hotplug cycle and leaving remaining monitors without a
+             * wallpaper after the dead surface blocks the render loop. */
+            if (wl_data->ctx && wl_data->ctx->monitors && to_free->output) {
+                monitor_instance_t *mon =
+                    monitor_list_find_by_output(wl_data->ctx->monitors,
+                                               to_free->output);
+                if (mon) {
+                    LOG_INFO("Monitor %s disconnected — cleaning up", mon->name);
+                    monitor_list_remove(wl_data->ctx->monitors, mon);
+                    monitor_instance_destroy(mon);
+                }
+            }
+
             /* Clean up Wayland objects */
             if (to_free->output) {
                 wl_output_destroy(to_free->output);

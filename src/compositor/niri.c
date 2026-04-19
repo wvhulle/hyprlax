@@ -146,7 +146,10 @@ static void niri_destroy(void) {
     }
 
     if (g_niri_data->event_pid > 0) {
-        kill(g_niri_data->event_pid, SIGTERM);
+        /* niri msg is a stateless event reader — SIGKILL is safe and
+         * immediate, avoiding the indefinite waitpid block that caused
+         * systemd to time out on SIGTERM and escalate to SIGKILL anyway. */
+        kill(g_niri_data->event_pid, SIGKILL);
         waitpid(g_niri_data->event_pid, NULL, 0);
     }
 
@@ -403,7 +406,7 @@ static void niri_disconnect_ipc(void) {
     }
 
     if (g_niri_data->event_pid > 0) {
-        kill(g_niri_data->event_pid, SIGTERM);
+        kill(g_niri_data->event_pid, SIGKILL);
         waitpid(g_niri_data->event_pid, NULL, 0);
         g_niri_data->event_pid = 0;
     }

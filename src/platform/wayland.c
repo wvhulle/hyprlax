@@ -662,30 +662,26 @@ static void fractional_scale_preferred(void *data,
         wl_egl_window_resize(monitor->wl_egl_window,
                              monitor->width, monitor->height, 0, 0);
 
-        if (is_fractional) {
-            /* Fractional scale: need viewport to set logical surface size,
-             * since wl_surface.set_buffer_scale only handles integers. */
-            if (!monitor->wp_viewport && g_wayland_data && g_wayland_data->viewporter) {
-                struct wp_viewport *vp = wp_viewporter_get_viewport(
-                    g_wayland_data->viewporter, monitor->wl_surface);
-                if (vp) {
-                    monitor->wp_viewport = vp;
-                    LOG_DEBUG("Created viewport for monitor %s (fractional scale %.4f)",
-                              monitor->name, new_scale);
-                }
+        /* Use viewport for both integer and fractional scales to set the
+         * correct logical surface size.  wl_surface.set_buffer_scale only
+         * handles integers and is never called, so without a viewport the
+         * compositor would interpret the physical-pixel buffer as logical
+         * pixels — making the surface oversized on scaled outputs. */
+        if (!monitor->wp_viewport && g_wayland_data && g_wayland_data->viewporter) {
+            struct wp_viewport *vp = wp_viewporter_get_viewport(
+                g_wayland_data->viewporter, monitor->wl_surface);
+            if (vp) {
+                monitor->wp_viewport = vp;
+                LOG_DEBUG("Created viewport for monitor %s (scale %.4f, fractional=%d)",
+                          monitor->name, new_scale, is_fractional);
             }
-            if (monitor->wp_viewport) {
-                /* Logical size = physical / scale */
-                int logical_w = (int)ceil(monitor->width / new_scale);
-                int logical_h = (int)ceil(monitor->height / new_scale);
-                wp_viewport_set_destination((struct wp_viewport *)monitor->wp_viewport,
-                                           logical_w, logical_h);
-            }
-        } else {
-            /* Integer scale: no viewport needed, existing integer scale
-             * from wl_output listener handles this case. */
-            LOG_DEBUG("Monitor %s: integer scale %d, no viewport needed",
-                      monitor->name, (int)(new_scale + 0.5));
+        }
+        if (monitor->wp_viewport) {
+            /* Logical size = physical / scale */
+            int logical_w = (int)ceil(monitor->width / new_scale);
+            int logical_h = (int)ceil(monitor->height / new_scale);
+            wp_viewport_set_destination((struct wp_viewport *)monitor->wp_viewport,
+                                       logical_w, logical_h);
         }
 
         LOG_DEBUG("Monitor %s: EGL window %dx%d (physical), scale %.4f, fractional=%d",

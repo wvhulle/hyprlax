@@ -304,7 +304,7 @@ in
       })
     ];
 
-    services.dual-scheme-app.apps = lib.mkIf hasDarkMode {
+    colorScheme.apps = lib.mkIf hasDarkMode {
       hyprlax = {
         dark = "dark";
         light = "light";

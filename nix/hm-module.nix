@@ -497,19 +497,15 @@ let
     in
     tomlFormat.generate "hyprlax.toml" { inherit global; };
 
-  lightLayers =
+  layers =
     lib.optionals (cfg.wallpaper != null) [ (mkWallpaperLayer cfg.wallpaper) ] ++ cfg.settings.layers;
 
-  darkLayersFinal =
-    lib.optionals (cfg.darkWallpaper != null) [ (mkWallpaperLayer cfg.darkWallpaper) ]
-    ++ (if cfg.darkLayers != null then cfg.darkLayers else [ ]);
+  configFile = mkConfigFile layers;
 
-  hasDarkMode = cfg.darkWallpaper != null || cfg.darkLayers != null;
-
-  configFile = mkConfigFile lightLayers;
-
-  configPath =
-    if hasDarkMode then "${config.xdg.configHome}/hyprlax/hyprlax.toml" else "${configFile}";
+  # hyprlax watches this file and live-reloads on change, so it reads the mutable path
+  # rather than the immutable store file. That lets the desktop layer (umbra) swap the
+  # file for dark/light themes — hyprlax stays a dumb daemon that loads whatever is there.
+  configPath = "${config.xdg.configHome}/hyprlax/hyprlax.toml";
 
   execStart =
     "${lib.getExe cfg.package}"
@@ -558,21 +554,6 @@ in
       '';
     };
 
-    darkWallpaper = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = ''
-        Dark-mode wallpaper image. When set, darkman switches between
-        light and dark hyprlax configs at runtime.
-      '';
-    };
-
-    darkLayers = lib.mkOption {
-      type = lib.types.nullOr (lib.types.listOf layerSubmodule);
-      default = null;
-      description = "Dark-mode layer overrides. Used instead of settings.layers in dark config.";
-    };
-
     settings = lib.mkOption {
       type = settingsSubmodule;
       default = { };
@@ -588,39 +569,16 @@ in
 
     home.packages = [ cfg.package ];
 
-    xdg.configFile = lib.mkMerge [
-      (lib.mkIf (!hasDarkMode) {
-        "hyprlax/hyprlax.toml".source = configFile;
-      })
-      (lib.mkIf hasDarkMode {
-        "hyprlax/hyprlax-light.toml".source = mkConfigFile lightLayers;
-        "hyprlax/hyprlax-dark.toml".source = mkConfigFile darkLayersFinal;
-      })
-    ];
-
-    colorScheme.apps = lib.mkIf hasDarkMode {
-      hyprlax = {
-        dark = "dark";
-        light = "light";
-        configFile = "hyprlax/hyprlax.toml";
-        postSwitch = "systemctl --user restart hyprlax.service";
-        activation = true;
-      };
-    };
+    # The default config. mkDefault so the desktop layer (umbra dark/light switching)
+    # can take ownership of this path without a conflict.
+    xdg.configFile."hyprlax/hyprlax.toml".source = lib.mkDefault configFile;
 
     systemd.user.services.hyprlax = {
       Unit = {
         Description = "hyprlax parallax wallpaper daemon";
         After = [ "graphical-session.target" ];
         PartOf = [ "graphical-session.target" ];
-        X-Restart-Triggers =
-          if hasDarkMode then
-            [
-              "${mkConfigFile lightLayers}"
-              "${mkConfigFile darkLayersFinal}"
-            ]
-          else
-            [ "${configFile}" ];
+        X-Restart-Triggers = [ "${configFile}" ];
       };
       Service = {
         Type = "simple";
